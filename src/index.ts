@@ -178,7 +178,8 @@ function calculateMatrixAndOffset(viewport: WebMercatorViewport, offsetMode: boo
 
     // projectionCenter = new Matrix4(viewProjectionMatrix)
     //   .transformVector([positionPixels[0], positionPixels[1], 0.0, 1.0]);
-    projectionCenter = transformMat4(new Float32Array([]), positionCommonSpace, viewProjectionMatrix);
+    // @ts-ignore
+    projectionCenter = transformMat4([], positionCommonSpace, viewProjectionMatrix);
 
     // Always apply uncentered projection matrix if available (shader adds center)
     viewMatrix = viewMatrixUncentered || viewMatrix;
@@ -280,11 +281,43 @@ export function getUniformsFromViewport({
   return uniforms;
 }
 
+export function getUniformKeys() {
+  return [
+    'project_uCoordinateOrigin',
+    'project_uCenter',
+    'project_uAntimeridian',
+    'project_uViewportSize',
+    'project_uDevicePixelRatio',
+    'project_uFocalDistance',
+    'project_uCommonUnitsPerMeter',
+    'project_uCommonUnitsPerWorldUnit',
+    'project_uCommonUnitsPerWorldUnit2',
+    'project_uScale',
+    'project_uViewProjectionMatrix',
+    'project_metersPerPixel',
+    'project_uModelMatrix'
+  ];
+}
+
 export function getUniforms(opts: Partial<IOptions> = INITIAL_MODULE_OPTIONS) {
   if (opts.viewport) {
     return getUniformsFromViewport(opts);
   }
   return {};
+}
+
+export function highPrecisionLngLat(lngLat: number[], offset = 0, stride = 2) {
+  let numElements = Math.ceil((lngLat.length - offset) / stride);
+  let precisionData = new Float32Array(numElements * 2);
+  for (let i = 0; i < numElements; ++i) {
+    let lli = offset + i * stride;
+    let pi = i * 2;
+
+    precisionData[pi]     = lngLat[lli]     - Math.fround(lngLat[lli]);
+    precisionData[pi + 1] = lngLat[lli + 1] - Math.fround(lngLat[lli + 1]);
+  }
+
+  return precisionData;
 }
 
 export function injectMercatorGLSL(vsSource: string): string {
@@ -309,3 +342,5 @@ export const project = {
   deprecations: [],
   getUniforms,
 };
+
+export { default as WebMercatorViewport } from '@math.gl/web-mercator'

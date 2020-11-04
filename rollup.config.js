@@ -39,6 +39,7 @@ const output = [
     file: isProduction ? `${fileName}.min.js` :  `${fileName}.js`,
     format: 'umd',
     name: pkg.namespace,
+    sourcemap: !isProduction,
     globals: {},
   },
   {
@@ -74,7 +75,12 @@ module.exports = [
         verbosity: -1,
         tsconfig: path.join(__dirname, './tsconfig.json'),
         useTsconfigDeclarationDir: true,
-        declaration: true
+        declaration: true,
+        tsconfigOverride: {
+          compilerOptions: {
+            module: 'esnext',
+          },
+        },
       }),
       babel({
         extensions: [ '.js', '.ts' ],
