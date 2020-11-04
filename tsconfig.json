@@ -1,0 +1,40 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "rootDir": ".",
+    "moduleResolution": "node",
+    "paths": {
+      "*": [
+        "node_modules",
+        "typings/*",
+        "types/*"
+      ]
+    },
+    "target": "esnext",
+    "module": "esnext",
+    "lib": ["es2015", "es2016", "es2017", "dom"],
+    "types": ["node", "reflect-metadata", "jest"],
+    "esModuleInterop": true,
+    "strictPropertyInitialization": false,
+    "strict": true,
+    "preserveSymlinks": true,
+    "allowJs": true,
+    "allowSyntheticDefaultImports": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": false,
+    "resolveJsonModule": true,
+    "emitDeclarationOnly": false,
+    "declaration": true,
+    "declarationDir": "dist/types"
+  },
+  "include": [
+    "src",
+    "typings.d.ts"
+  ],
+  "exclude": [
+    "dist",
+    "**/__tests__/**/*",
+    "**/*.spec.*",
+    "node_modules"
+  ]
+}
