@@ -64,6 +64,19 @@ module.exports = [
       replace({ 'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV) }),
       glslify(),
       json(),
+      typescript({
+        // clean: true,
+        verbosity: -1,
+        tsconfig: path.join(__dirname, './tsconfig.json'),
+        useTsconfigDeclarationDir: true,
+        declaration: true,
+        tsconfigOverride: {
+          sourceMap: true,
+          compilerOptions: {
+            module: 'esnext',
+          },
+        },
+      }),
       nodeResolve({
         mainFields: ['module', 'main'], // Default: ['module', 'main']
         browser: true,  // Default: false
@@ -71,19 +84,8 @@ module.exports = [
         preferBuiltins: true,  // Default: true
       }),
       commonjs(),
-      typescript({
-        verbosity: -1,
-        tsconfig: path.join(__dirname, './tsconfig.json'),
-        useTsconfigDeclarationDir: true,
-        declaration: true,
-        tsconfigOverride: {
-          compilerOptions: {
-            module: 'esnext',
-          },
-        },
-      }),
       babel({
-        extensions: [ '.js', '.ts' ],
+        // extensions: [ '.js', '.ts' ],
         babelHelpers: 'inline' // 'bundled' | 'runtime' | 'inline' | 'external'
       }),
       isProduction ? terser() : false,

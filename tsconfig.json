@@ -10,7 +10,7 @@
         "types/*"
       ]
     },
-    "target": "esnext",
+    "target": "es2015",
     "module": "esnext",
     "lib": ["es2015", "es2016", "es2017", "dom"],
     "types": ["node", "reflect-metadata", "jest"],
@@ -24,6 +24,7 @@
     "emitDecoratorMetadata": false,
     "resolveJsonModule": true,
     "emitDeclarationOnly": false,
+    "sourceMap": true,
     "declaration": true,
     "declarationDir": "dist/types"
   },

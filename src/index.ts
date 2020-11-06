@@ -188,9 +188,9 @@ function calculateMatrixAndOffset(viewport: WebMercatorViewport, offsetMode: boo
     // viewMatrix = new Matrix4(viewMatrixUncentered || viewMatrix)
     //   .multiplyRight(VECTOR_TO_POINT_MATRIX);
     // @ts-ignore
-    viewProjectionMatrix = multiply(new Float32Array([]), projectionMatrix, viewMatrix);
+    viewProjectionMatrix = multiply([], projectionMatrix, viewMatrix);
     // @ts-ignore
-    viewProjectionMatrix = multiply(new Float32Array([]), viewProjectionMatrix, VECTOR_TO_POINT_MATRIX);
+    viewProjectionMatrix = multiply([], viewProjectionMatrix, VECTOR_TO_POINT_MATRIX);
   }
 
   return {
@@ -206,10 +206,10 @@ function calculateViewportUniforms(options: IOptions) {
   const {
     viewport,
     devicePixelRatio,
-    projectOffsetZoom = 12,
+    projectOffsetZoom = 7,
   } = options;
 
-  const offsetMode = viewport.zoom > projectOffsetZoom;
+  const offsetMode = viewport.zoom >= projectOffsetZoom;
 
   const {
     projectionCenter,
@@ -268,7 +268,7 @@ export function getUniformsFromViewport({
   viewport,
   devicePixelRatio = 1,
   modelMatrix = null,
-  projectOffsetZoom = 12,
+  projectOffsetZoom = 7,
 }: Partial<IOptions> = {}) {
   const uniforms = getMemoizedViewportUniforms({
     viewport,
@@ -343,4 +343,6 @@ export const project = {
   getUniforms,
 };
 
-export { default as WebMercatorViewport } from '@math.gl/web-mercator'
+export {
+  WebMercatorViewport
+}

@@ -15,7 +15,7 @@
   "scripts": {
     "tsc": "tsc --project tsconfig.json --declaration --declarationDir dist/types",
     "dev": "cross-env NODE_ENV=development INPUT=src/index.ts rollup -wm -c rollup.config.js",
-    "prod": "cross-env NODE_ENV=production INPUT=src/index.ts rollup -wm -c rollup.config.js"
+    "prod": "cross-env NODE_ENV=production INPUT=src/index.ts rollup -c rollup.config.js"
   },
   "keywords": [
     "glsl",

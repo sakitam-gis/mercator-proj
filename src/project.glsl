@@ -3,7 +3,7 @@
 #define PROJECT_EARTH_RADIUS 6371008.8
 #define PROJECT_TILE_SCALE (PROJECT_TILE_SIZE / (PROJECT_PI * 2.0))
 #define PROJECT_EARTH_CIRCUMFRENCE (2.0 * PROJECT_PI * PROJECT_EARTH_RADIUS)
-#define PROJECT_OFFSET_THRESHOLD 4096.0
+#define PROJECT_OFFSET_THRESHOLD 128.0
 
 uniform vec4 project_uCenter;
 uniform vec3 project_uCoordinateOrigin;
@@ -66,8 +66,11 @@ vec4 project_position(vec4 position, vec3 position64Low) {
 
   // Work around for a Mac+NVIDIA bug https://github.com/visgl/deck.gl/issues/4145
   if (project_uScale < PROJECT_OFFSET_THRESHOLD) {
+    vec2 point = project_mercator(position_world.xy) * PROJECT_TILE_SCALE;
+    // FIXME: Y 轴发生了偏移，减去这个值看起来不错，但是不知道是为什么
+//    point -= vec2(0.0, 0.00335);
     return vec4(
-      project_mercator(position_world.xy) * PROJECT_TILE_SCALE,
+      point,
       project_size(position_world.z),
       position_world.w
     );
