@@ -206,7 +206,7 @@ function calculateViewportUniforms(options: IOptions) {
   const {
     viewport,
     devicePixelRatio,
-    projectOffsetZoom = 7,
+    projectOffsetZoom = 12,
   } = options;
 
   const offsetMode = viewport.zoom >= projectOffsetZoom;
@@ -268,7 +268,7 @@ export function getUniformsFromViewport({
   viewport,
   devicePixelRatio = 1,
   modelMatrix = null,
-  projectOffsetZoom = 7,
+  projectOffsetZoom = 12,
 }: Partial<IOptions> = {}) {
   const uniforms = getMemoizedViewportUniforms({
     viewport,
