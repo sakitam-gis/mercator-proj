@@ -1,8 +1,10 @@
+// import { mat4, vec4 } from 'gl-matrix';
 import {
   WebMercatorViewport,
   getDistanceScales,
 } from '@math.gl/web-mercator';
 
+import { getPlatformShaderDefines, getApplicationDefines, FRAGMENT_SHADER_PROLOGUE } from './utils';
 import projectShader from './project.glsl';
 import fp32shader from './fp32.glsl';
 
@@ -25,6 +27,7 @@ export interface IOptions {
 const ZERO_VECTOR: [number, number, number, number] | Float32Array = [0, 0, 0, 0];
 const VECTOR_TO_POINT_MATRIX = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0];
 const IDENTITY_MATRIX = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+const DEFAULT_COORDINATE_ORIGIN = [0, 0, 0];
 const INITIAL_MODULE_OPTIONS = {
   devicePixelRatio: 1,
 };
@@ -161,18 +164,22 @@ const getMemoizedViewportUniforms = memoize(calculateViewportUniforms);
 function calculateMatrixAndOffset(viewport: WebMercatorViewport, offsetMode: boolean) {
   // @ts-ignore
   const { viewMatrixUncentered, projectionMatrix } = viewport;
-  let { viewMatrix, viewProjectionMatrix } = viewport;
+  // eslint-disable-next-line prefer-const
+  let {viewMatrix, viewProjectionMatrix} = viewport;
 
   let projectionCenter = ZERO_VECTOR;
-  let shaderCoordinateOrigin = [0, 0, 0];
-
   const geospatialOrigin = [Math.fround(viewport.longitude), Math.fround(viewport.latitude), 0];
+  let shaderCoordinateOrigin = DEFAULT_COORDINATE_ORIGIN;
 
   if (offsetMode) {
-    // viewport center in world space
     shaderCoordinateOrigin = geospatialOrigin;
+    // Calculate transformed projectionCenter (using 64 bit precision JS)
+    // This is the key to offset mode precision
+    // (avoids doing this addition in 32 bit precision in GLSL)
     // @ts-ignore
-    const positionCommonSpace = viewport?.projectPosition(geospatialOrigin || shaderCoordinateOrigin);
+    const positionCommonSpace = viewport?.projectPosition(
+      geospatialOrigin || shaderCoordinateOrigin
+    );
 
     positionCommonSpace[3] = 1;
 
@@ -198,7 +205,7 @@ function calculateMatrixAndOffset(viewport: WebMercatorViewport, offsetMode: boo
     viewProjectionMatrix,
     projectionCenter,
     geospatialOrigin,
-    shaderCoordinateOrigin
+    shaderCoordinateOrigin,
   };
 }
 
@@ -220,18 +227,17 @@ function calculateViewportUniforms(options: IOptions) {
 
   // Calculate projection pixels per unit
   const { distanceScales } = viewport;
+
+  const viewportSize = [viewport.width * devicePixelRatio, viewport.height * devicePixelRatio];
+  // const distanceScalesAtOrigin = viewport.getDistanceScales(geospatialOrigin);
   const distanceScalesAtOrigin = getDistanceScales({
     longitude: geospatialOrigin[0],
     latitude: geospatialOrigin[1],
     highPrecision: true
   });
 
-  const viewportSize = [viewport.width * devicePixelRatio, viewport.height * devicePixelRatio];
-
   return {
     project_uCoordinateOrigin: shaderCoordinateOrigin,
-    // Projection mode values
-    // project_lngLatCenter: geospatialOrigin,
     project_uCenter: projectionCenter,
     project_uAntimeridian: (viewport.longitude || 0) - 180,
 
@@ -320,11 +326,21 @@ export function highPrecisionLngLat(lngLat: number[], offset = 0, stride = 2) {
   return precisionData;
 }
 
-export function injectMercatorGLSL(vsSource: string): string {
-  const versionMatch = vsSource.match(/#version \d+(\s+es)?\s*\n/);
+export function injectMercatorGLSL(gl: WebGLRenderingContext | WebGL2RenderingContext, source: string, defines = {
+  PROJECT_OFFSET_THRESHOLD: '4096.0'
+}): string {
+  const versionMatch = source.match(/#version \d+(\s+es)?\s*\n/);
   const versionLine = versionMatch ? versionMatch[0] : '';
 
-  return vsSource.replace(versionLine, `${versionLine}\n${fp32shader}\n${projectShader}\n`);
+  return `\
+${versionLine}
+${getPlatformShaderDefines(gl)}
+${getApplicationDefines(defines)}
+${FRAGMENT_SHADER_PROLOGUE}
+${fp32shader}
+${projectShader}
+${source.replace(versionLine, '')}
+`;
 }
 
 export const fp32 = {

@@ -1,9 +1,8 @@
 #define PROJECT_TILE_SIZE 512.0
 #define PROJECT_PI 3.141592653589793
 #define PROJECT_EARTH_RADIUS 6371008.8
-#define PROJECT_TILE_SCALE (PROJECT_TILE_SIZE / (PROJECT_PI * 2.0))
+#define PROJECT_WORLD_SCALE (PROJECT_TILE_SIZE / (PROJECT_PI * 2.0))
 #define PROJECT_EARTH_CIRCUMFRENCE (2.0 * PROJECT_PI * PROJECT_EARTH_RADIUS)
-#define PROJECT_OFFSET_THRESHOLD 4096.0
 
 uniform vec4 project_uCenter;
 uniform vec3 project_uCoordinateOrigin;
@@ -41,6 +40,12 @@ vec4 project_size(vec4 meters) {
   return vec4(meters.xyz * project_uCommonUnitsPerMeter, meters.w);
 }
 
+vec3 project_normal(vec3 vector) {
+  // Apply model matrix
+  vec4 normal_modelspace = project_uModelMatrix * vec4(vector, 0.0);
+  return normalize(normal_modelspace.xyz * project_uCommonUnitsPerMeter);
+}
+
 vec4 project_offset(vec4 offset) {
   float dy = offset.y;
   dy = clamp(dy, -1., 1.);
@@ -56,16 +61,17 @@ vec2 project_mercator(vec2 lnglat) {
 //  (Math.PI - Math.log(Math.tan(Math.PI * 0.25 - (Math.PI / 180 * map.getCenter().toArray()[1]) * 0.5)))
   return vec2(
     radians(x) + PROJECT_PI,
-    PROJECT_PI + log(tan(PROJECT_PI * 0.25 + radians(lnglat.y) * 0.5))
+    PROJECT_PI + log(tan_fp32(PROJECT_PI * 0.25 + radians(lnglat.y) * 0.5))
   );
 }
 
+// Projects positions (defined by project_uCoordinateSystem) to common space (defined by project_uProjectionMode)
 vec4 project_position(vec4 position, vec3 position64Low) {
   vec4 position_world = project_uModelMatrix * position;
 
   // Work around for a Mac+NVIDIA bug https://github.com/visgl/deck.gl/issues/4145
   if (project_uScale < PROJECT_OFFSET_THRESHOLD) {
-    vec2 point = project_mercator(position_world.xy) * PROJECT_TILE_SCALE;
+    vec2 point = project_mercator(position_world.xy) * PROJECT_WORLD_SCALE;
     return vec4(
       point,
       project_size(position_world.z),
