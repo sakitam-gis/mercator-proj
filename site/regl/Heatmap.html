@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8" />
+  <title>Heatmap</title>
+  <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <link href="https://api.mapbox.com/mapbox-gl-js/v1.12.0/mapbox-gl.css" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/dat.gui/build/dat.gui.css">
+  <style>
+    body { margin: 0; padding: 0; }
+    #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+  </style>
+</head>
+<body>
+<div id="map"></div>
+<script src="https://api.mapbox.com/mapbox-gl-js/v1.12.0/mapbox-gl.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/regl@2.0.1/dist/regl.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dat.gui/build/dat.gui.js"></script>
+<script src="../../dist/mercator-proj.js?data=1"></script>
+<script>
+
+  const SCALE_MAX_LENGTH = 11;
+  const CLEAR_COLOR = [0, 0, 0, 0];
+  const DEFAULT_COLOR_STOP = {
+    color: CLEAR_COLOR,
+    offset: 0,
+  };
+
+  function getPixelRatio(ctx) {
+    const dpr = window.devicePixelRatio || 1;
+    const bsr =
+      ctx.webkitBackingStorePixelRatio ||
+      ctx.mozBackingStorePixelRatio ||
+      ctx.msBackingStorePixelRatio ||
+      ctx.oBackingStorePixelRatio ||
+      ctx.backingStorePixelRatio ||
+      1;
+
+    return dpr / bsr;
+  }
+
+  function gradientMapper (grad) {
+    const colors = [];
+    const gradLength = grad.length;
+    for (let i = 0; i < grad.length; i++) {
+      const d = grad[i];
+      colors.push({
+        color: [d.color[0] / 255, d.color[1] / 255, d.color[2] / 255, d.color[3] === undefined ? 1.0 : d.color[3]],
+        offset: d.offset,
+      });
+    }
+
+    return {
+      value: colors,
+      length: gradLength,
+    };
+  }
+
+  function defineMacros(src, macros) {
+    const defs = Object.keys(macros).map((key) => `#define ${key} ${macros[key]}\n`).join('');
+    return `${defs}\n${src}`;
+  }
+
+  function _bindStructArray(structPropertyNames, defaultValue, maxArrayLength, glslIdentifier, propName = glslIdentifier) {
+    const output = {};
+    for (let i = 0; i < maxArrayLength; ++i) {
+      // eslint-disable-next-line no-restricted-syntax
+      for (const key of structPropertyNames) {
+        output[`${glslIdentifier}[${i}].${key}`] = (_, props) => {
+          const inputArray = props[propName];
+          return (
+            i < inputArray.length
+              ? inputArray[i][key]
+              : defaultValue[key]
+          );
+        };
+      }
+    }
+    return output;
+  }
+
+  const bindStructArray = _bindStructArray.bind(null, ['color', 'offset'], DEFAULT_COLOR_STOP);
+
+  const colorScaleUniforms = bindStructArray(SCALE_MAX_LENGTH, 'colorScale');
+
+  const defaultOptions = {
+    size: 20,
+    max: Infinity,
+    blur: 1.0,
+    heatOpacity: 1.0,
+    gradient: [
+      {
+        color: [255, 255, 255, 0.0],
+        offset: 0
+      },
+      {
+        color: [212, 225, 255, 1.0],
+        offset: 0.2
+      },
+      {
+        color: [166, 255, 115, 1.0],
+        offset: 0.45
+      },
+      {
+        color: [255, 255, 0, 0.5],
+        offset: 0.75
+      },
+      {
+        color: [255, 0, 0, 1.0],
+        offset: 1.0
+      },
+    ],
+    SCALE_MAX_LENGTH: 11,
+  };
+
+  class Heatmap {
+    constructor(gl, options = {}) {
+      this.gl = gl;
+      this.canvas = gl.canvas;
+
+      this.options = {
+        ...defaultOptions,
+        ...options
+      };
+
+      this.pixelRatio = getPixelRatio({});
+
+      this.renderUniforms = {};
+      this.rendererData = [];
+
+      this.initialize();
+    }
+
+    initialize() {
+      this.regl = createREGL({
+        gl: this.gl,
+        extensions: ['OES_texture_float'],
+        attributes: {
+          preserveDrawingBuffer: true
+        }
+      });
+
+      // @link https://github.com/regl-project/regl/issues/498
+      // const maxRenderbufferSize = Math.min(this.regl.limits.maxRenderbufferSize, 4096);
+
+      // const maxRepeatsX = Math.floor(maxRenderbufferSize / this.canvas.width);
+      // const maxRepeatsY = Math.floor(maxRenderbufferSize / this.canvas.height);
+
+      this.gradient = gradientMapper(this.options.gradient);
+      this.fboTexture = this.regl.texture({
+        width: this.canvas.width,
+        height: this.canvas.height,
+      });
+      this.fbo = this.regl.framebuffer({
+        width: this.canvas.width,
+        height: this.canvas.height,
+        colorTexture: this.fboTexture
+      });
+
+      this.originData = [];
+
+      const uniforms = {};
+
+      const keys = mercatorProj.getUniformKeys();
+      keys.forEach(key => {
+        uniforms[key] = this.regl.prop(key);
+      });
+
+      // 构建灰度图
+      this.gradientCommand = this.regl({
+        vert: mercatorProj.injectMercatorGLSL(this.gl, `attribute vec2 a_position;
+attribute vec2 a_precisionBits;
+attribute float a_intensity;
+
+uniform float u_size;
+uniform float u_density;
+varying float v_i;
+
+void main() {
+  gl_Position = project_position_to_clipspace(vec3(a_position, 0.0), vec3(a_precisionBits, 0.0), vec3(0.0));
+  gl_PointSize = u_size * u_density;
+  v_i = a_intensity;
+}
+`),
+        frag: `precision mediump float;
+uniform float u_max;
+uniform float u_blur;
+varying float v_i;
+void main() {
+  float r = 0.0;
+  vec2 cxy = 2.0 * gl_PointCoord - 1.0;
+  r = dot(cxy, cxy);
+  if (r <= 1.0) {
+    gl_FragColor = vec4(0, 0, 0, (v_i/u_max) * u_blur * (1.0 - sqrt(r)));
+  }
+}
+`,
+        uniforms: {
+          ...uniforms,
+          u_matrix: (_, { uMatrix }) => uMatrix,
+          u_density: (_, { uDensity }) => uDensity,
+          u_size: (_, { uSize }) => uSize,
+          u_blur: (_, { uBlur }) => uBlur,
+          u_max: (_, { uMax }) => uMax,
+        },
+        attributes: {
+          a_position: (_, { aPosition }) => aPosition,
+          a_precisionBits: (_, { aPrecisionBits }) => aPrecisionBits,
+          a_intensity: (_, { aIntensity }) => aIntensity,
+        },
+        depth: {
+          enable: false,
+          mask: true
+        },
+        blend: {
+          enable: true,
+          func: {
+            src: 'one',
+            dst: 'one minus src alpha',
+          },
+          equation: 'add',
+        },
+        framebuffer: this.fbo,
+        primitive: 'points',
+        offset: 0,
+        count: this.regl.prop('drawCont'),
+        viewport: (_, { canvasSize: [width, height] }) => ({ x: 0, y: 0, width, height })
+      });
+
+      // 灰度图着色
+      this.colorCommand = this.regl({
+        vert: `attribute vec2 a_texCoord;
+uniform sampler2D u_framebuffer;
+
+varying vec2 v_texCoord;
+
+void main() {
+  vec2 clipSpace = a_texCoord * 2.0 - 1.0;
+
+  gl_Position = vec4(clipSpace * vec2(1, 1), 0.0, 1.0);
+  v_texCoord = a_texCoord;
+}
+`,
+        frag: defineMacros(`precision mediump float;
+
+#ifndef SCALE_MAX_LENGTH
+#define SCALE_MAX_LENGTH 10
+#endif
+
+struct ScaleStop {
+  float offset;
+  vec4 color;
+};
+
+varying vec2 v_texCoord;
+uniform sampler2D u_framebuffer;
+
+uniform ScaleStop colorScale[SCALE_MAX_LENGTH];
+uniform int colorScaleLength;
+uniform float u_opacity;
+
+
+float remap (float minval, float maxval, float curval) {
+  return (curval - minval) / (maxval - minval);
+}
+
+void main() {
+  float alpha = texture2D(u_framebuffer, v_texCoord.xy).a;
+  if (alpha > 0.0 && alpha <= 1.0) {
+    vec4 color_;
+    if (colorScaleLength > 0) {
+      for (int i = 0; i < SCALE_MAX_LENGTH; ++i) {
+        // If value above color scale range, clamp to highest color stop.
+        if (alpha <= colorScale[i].offset) {
+          if (i == 0) {
+            color_ = colorScale[i].color;
+          } else {
+            float percent = remap(colorScale[i - 1].offset, colorScale[i].offset, alpha);
+            color_ = mix(colorScale[i - 1].color, colorScale[i].color, percent);
+          }
+
+          break;
+        }
+      }
+    } else {
+      color_ = vec4(0.0, 0.0, 0.0, 0.0);
+    }
+
+    color_.a = color_.a - (1.0 - u_opacity);
+    if (color_.a < 0.0) {
+      color_.a = 0.0;
+    }
+    gl_FragColor = color_;
+  }
+}
+`, {
+          SCALE_MAX_LENGTH: this.options.SCALE_MAX_LENGTH
+        }),
+        uniforms: {
+          ...colorScaleUniforms,
+          u_opacity: (_, { opacity }) => opacity,
+          colorScale: (_, { colorScale }) => colorScale,
+          colorScaleLength: (_, { colorScaleLength }) => colorScaleLength,
+          u_framebuffer: (_, { uFramebuffer }) => uFramebuffer,
+        },
+        attributes: {
+          a_texCoord: (_, { aTexCoord }) => aTexCoord,
+        },
+        depth: {
+          enable: false,
+          mask: false
+        },
+        blend: {
+          enable: false,
+          func: {
+            src: 'one',
+            dst: 'one minus src alpha',
+          },
+          equation: 'add',
+        },
+        primitive: 'triangle',
+        offset: 0,
+        count: 6,
+        viewport: (_, { canvasSize: [width, height] }) => ({ x: 0, y: 0, width, height })
+      });
+    }
+
+    destroyed() {
+
+    }
+
+    render(data, uniforms) {
+      if (uniforms) {
+        this.renderUniforms = uniforms;
+      }
+      this.rendererData = data;
+      const { max, heatOpacity, size, blur } = this.options;
+      this.clear();
+
+      // this.fbo({
+      //   color: this.fboTexture
+      // });
+
+      this.gradientCommand({
+        // uniforms
+        uDensity: this.pixelRatio,
+        uMax: max,
+        uSize: size,
+        uBlur: blur,
+        canvasSize: [this.canvas.width, this.canvas.height],
+        // attributes
+        aPosition: {
+          buffer: this.regl.buffer({
+            type: 'float32',
+            usage: 'static',
+            // length: 0,
+            data: new Float32Array(data.positions),
+          }),
+          offset: 0,
+          size: 2,
+          stride: 0,
+          normalized: false,
+        },
+        aPrecisionBits: {
+          buffer: this.regl.buffer({
+            type: 'float32',
+            usage: 'static',
+            // length: 0,
+            data: new Float32Array(data.precisionData),
+          }),
+          offset: 0,
+          size: 2,
+          stride: 0,
+          normalized: false,
+        },
+
+        aIntensity: {
+          buffer: this.regl.buffer({
+            type: 'float32',
+            usage: 'static',
+            // length: 0,
+            data: new Float32Array(data.intensityVert),
+          }),
+          offset: 0,
+          size: 1,
+          stride: 0,
+          normalized: false,
+        },
+
+        drawCont: data.positions.length / 2,
+        // fbo: this.fbo,
+        ...this.renderUniforms,
+      });
+
+      this.colorCommand({
+        // uniforms
+        opacity: heatOpacity,
+        colorScale: this.gradient.value,
+        colorScaleLength: this.gradient.length,
+        uFramebuffer: this.fboTexture,
+        canvasSize: [this.canvas.width, this.canvas.height],
+        // attributes
+        aTexCoord: {
+          buffer: this.regl.buffer({
+            type: 'float32',
+            usage: 'static',
+            // length: 0,
+            data: new Float32Array([
+              0.0, 0.0,
+              1.0, 0.0,
+              0.0, 1.0,
+              0.0, 1.0,
+              1.0, 0.0,
+              1.0, 1.0
+            ]),
+          }),
+          offset: 0,
+          size: 2,
+          stride: 0,
+          normalized: false,
+        },
+      });
+    }
+
+    renderData(data, uniforms) {
+      const len = data.length;
+      const positions = [];
+      const intensityVert = [];
+      for (let i = 0; i < len; i++) {
+        positions[i * 2] = data[i][0];
+        positions[i * 2 + 1] = data[i][1];
+        intensityVert[i] = data[i][2];
+      }
+
+      const precisionData = mercatorProj.highPrecisionLngLat(positions);
+
+      const rendererData = {
+        positions,
+        precisionData,
+        intensityVert,
+      };
+      this.originData = data;
+      this.render(rendererData, uniforms);
+    }
+
+    resize() {
+      if (this.fbo && this.canvas) {
+        this.fbo.resize(this.canvas.width, this.canvas.height);
+      }
+      this.render(this.rendererData);
+      return this;
+    }
+
+    clear() {
+      return this;
+    }
+
+    setMax(max) {
+      if (max !== undefined && typeof max === 'number') {
+        this.options.max = max;
+        this.render(this.rendererData);
+      } else {
+        console.warn('Value must be number');
+      }
+      return this;
+    }
+
+    setSize(size) {
+      if (size !== undefined && typeof size === 'number') {
+        this.options.size = size;
+        this.render(this.rendererData);
+      } else {
+        console.warn('Value must be number');
+      }
+      return this;
+    }
+
+    setBlur(blur) {
+      if (blur !== undefined && typeof blur === 'number') {
+        this.options.blur = blur;
+        this.render(this.rendererData);
+      } else {
+        console.warn('Value must be number');
+      }
+      return this;
+    }
+
+    /**
+     * set opacity
+     * @param opacity
+     * @returns {Heatmap}
+     */
+    setOpacity(opacity) {
+      if (opacity !== undefined && typeof opacity === 'number') {
+        if (opacity < 0 || opacity > 1) {
+          console.warn('Value must betwn 0-1');
+          return this;
+        }
+        this.options.heatOpacity = opacity;
+        this.render(this.rendererData);
+      } else {
+        console.warn('Value must be number');
+      }
+      return this;
+    }
+
+    addData(data) {
+      for (let i = 0; i < data.length; i++) {
+        this.originData.push(data[i]);
+      }
+      this.renderData(this.originData);
+
+      return this;
+    }
+
+    setOptions(options = {}) {
+      this.options = {
+        ...this.options,
+        ...options,
+      };
+    }
+
+    getOptions() {
+      return this.options;
+    }
+  }
+</script>
+<script>
+  mapboxgl.accessToken = "pk.eyJ1Ijoic21pbGVmZGQiLCJhIjoiY2tnN2Iybm91MDIzajJ5bHM1N3o5YzgybiJ9.KI0dCXX1rAfcLO1iwGKwHg"; // eslint-disable-line
+
+  function random(min, max) {
+    return (Math.random() * (max - min)) + min;
+  }
+
+  function generateData (count) {
+    const data = [];
+    for (let i = 0; i < count; i++) {
+      let val = Math.random() * 100;
+      const x = random(76, 125);
+      const y = random(18.85370312480697, 50.63584821577305);
+      data.push([x, y, val]);
+    }
+    return data;
+  }
+
+  const data = generateData(1000);
+
+  class CustomLayer {
+    constructor(id, data, options) {
+      this.id = id || 'custom-layer';
+      this.type = 'custom';
+      this.renderingMode = '2d';
+
+      this.data = data;
+      this.needUpdateData = true;
+
+      this.options = { ...options };
+    }
+
+    onAdd(m, gl) {
+      this.map = m;
+
+      const opt = this?.getHeatMapOptions();
+      this.heatmap = new Heatmap(gl, opt);
+    }
+
+    render(gl) {
+      const center = this.map.getCenter();
+      const centerArray = center.toArray();
+      const zoom = this.map.getZoom();
+      const { width, height } = gl.canvas;
+
+      // console.log(scale);
+      // Mapbox passes us a projection matrix
+      // const { projMatrix, invProjMatrix, glCoordMatrix, mercatorMatrix, width, height, pixelMatrix, pixelMatrixInverse } = this.map.transform;
+
+      this.viewport = new mercatorProj.WebMercatorViewport({
+        width: width,
+        height: height,
+        longitude: center && centerArray[0],
+        latitude: center && centerArray[1],
+        zoom,
+        pitch: this.map.getPitch(),
+        bearing: this.map.getBearing(),
+      });
+
+      const projectUniforms = mercatorProj.getUniforms({
+        viewport: this.viewport,
+        devicePixelRatio: 1,
+        projectOffsetZoom: 12
+      });
+
+      const uniforms = {
+        u_zoom: zoom,
+        u_radiusScale: projectUniforms.project_metersPerPixel,
+        ...projectUniforms,
+      };
+
+      window.uniforms = uniforms;
+      window.viewport = this.viewport;
+
+      const data = this.getData();
+      const needUpdateData = this.getDataState();
+
+      if (data && this.heatmap) {
+        if (needUpdateData) {
+          this.heatmap.renderData(data, uniforms);
+        } else {
+          this.heatmap.render(this.heatmap.rendererData, uniforms);
+        }
+        this.setDataState(false);
+      }
+    }
+
+    onRemove() {
+    }
+
+    getData() {
+      return this.data;
+    }
+
+    setData(data) {
+      this.data = data;
+      this.needUpdateData = true;
+    }
+
+    getDataState() {
+      return this.needUpdateData;
+    }
+
+    setDataState(state) {
+      this.needUpdateData = state;
+    }
+
+    setHeatMapOptions(opt = {}) {
+      this.options = {
+        ...this.options,
+        ...opt,
+      };
+
+      if (this.heatmap) {
+        this.heatmap.setOptions(this.options);
+      }
+
+      this.map.triggerRepaint();
+    }
+
+    getHeatMapOptions() {
+      return this.options;
+    }
+  }
+
+  class AppAnimationLoop {
+    start() {
+      const bearing = 0;
+      const pitch = 0;
+      this.map = new mapboxgl.Map({
+        container: 'map',
+        style: 'mapbox://styles/mapbox/dark-v10',
+        // center: [113.5958870877729, 38.27348780477419],
+        center: [114.17610137108795, 38.89409734122748],
+        zoom: 5,
+        // zoom: 2,
+        pitch,
+        bearing,
+        // zoom: 24,
+        maxZoom: 24,
+        antialias: true
+      });
+
+      this.map.on('load', () => {
+        const options = {
+          size: 25.0,
+          max: 1,
+          blur: 0.05,
+          heatOpacity: 1,
+          gradient: [
+            {
+              color: [255, 255, 255, 0.0],
+              offset: 0
+            },
+            {
+              color: [212, 225, 255, 1.0],
+              offset: 0.2
+            },
+            {
+              color: [166, 255, 115, 1.0],
+              offset: 0.45
+            },
+            {
+              color: [255, 255, 0, 0.5],
+              offset: 0.75
+            },
+            {
+              color: [255, 0, 0, 1.0],
+              offset: 1.0
+            }
+          ]
+        };
+
+        const layer = new CustomLayer('heatmap', data, options);
+        this.map.addLayer(layer);
+
+        const gui = new dat.GUI();
+
+        gui.add(options, "size", 1, 100).onChange(function() {
+          layer.setHeatMapOptions({
+            size: options.size,
+          });
+        });
+
+        gui.add(options, "heatOpacity", 0, 1).onChange(function() {
+          layer.setHeatMapOptions({
+            heatOpacity: options.heatOpacity,
+          });
+        });
+
+        gui.add(options, "blur", 0, 1).onChange(function() {
+          layer.setHeatMapOptions({
+            blur: options.blur,
+          });
+        });
+      });
+
+      window.map = this.map;
+    }
+
+    delete() {
+      this.map.remove();
+    }
+  }
+
+  new AppAnimationLoop().start();
+</script>
+</body>
+</html>
+
