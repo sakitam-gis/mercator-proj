@@ -103,7 +103,7 @@ void main(void) {
       const center = this.map.getCenter();
       const centerArray = center.toArray();
       const zoom = this.map.getZoom();
-      const { width, height } = gl.canvas;
+      const { width, height } = this.map.transform;
 
       // console.log(scale);
       // Mapbox passes us a projection matrix
@@ -121,8 +121,6 @@ void main(void) {
 
       const projectUniforms = mercatorProj.getUniforms({
         viewport: this.viewport,
-        devicePixelRatio: 1,
-        projectOffsetZoom: 12
       });
 
       const uniforms = {

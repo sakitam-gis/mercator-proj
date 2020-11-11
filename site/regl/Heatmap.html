@@ -18,6 +18,208 @@
 <script src="https://cdn.jsdelivr.net/npm/dat.gui/build/dat.gui.js"></script>
 <script src="../../dist/mercator-proj.js?data=1"></script>
 <script>
+  /**
+   * 移除 dom
+   * @param node
+   * @returns {removeDomNode}
+   */
+  function removeDomNode(node) {
+    if (!node) {
+      return null;
+    }
+    if (node.parentNode) {
+      node.parentNode.removeChild(node);
+    }
+    return node;
+  }
+
+  class Overlay {
+    constructor(id, options = {}) {
+      if (!id) {
+        throw Error('layer id must be specified');
+      }
+
+      this.id = id;
+      this.options = options;
+      this.canvas = null;
+      this.canvas2 = null;
+
+      this.devicePixelRatio = this.options.devicePixelRatio ||
+        // @ts-ignore
+        (window.devicePixelRatio || (window.screen.deviceXDPI / window.screen.logicalXDPI));
+
+      this.render = this.render.bind(this);
+
+      this.type = 'custom';
+      this.renderingMode = '2d';
+
+      this.stop = this.stop.bind(this);
+      this.render = this.render.bind(this);
+      this.handleResize = this.handleResize.bind(this);
+    }
+
+    stop() {
+    }
+
+    onAdd(map) {
+      this.setMap(map);
+      this.canvas = this.initialize();
+      if (this.options.doubleBuffer) {
+        this.canvas2 = this.initialize();
+      }
+
+      if (this.canvas !== null) {
+        // this._retina = window.devicePixelRatio >= 2;
+        // this.gl = this.canvas.getContext('webgl');
+        // instrumentGLContext(this.gl);
+        this.render();
+        this.registerEvents();
+      }
+    }
+
+    handleResize() {
+      if (this.canvas) {
+        this.resizeCanvas(this.canvas);
+      }
+      this.render();
+    }
+
+    registerEvents() {
+      this.map.on('render', this.render);
+
+      // this.map.on('resize', this.handleResize);
+      // this.map.on('movestart', this.stop);
+      // this.map.on('moveend', this.render);
+      // this.map.on('zoomstart', this.stop);
+      // this.map.on('zoomend', this.render);
+      // this.map.on('rotatestart', this.stop);
+      // this.map.on('rotateend', this.render);
+      // this.map.on('pitchstart', this.stop);
+      // this.map.on('pitchend', this.render);
+    }
+
+    unregisterEvents() {
+      this.map.off('render', this.render);
+      // this.map.off('resize', this.handleResize);
+      // this.map.off('movestart', this.stop);
+      // this.map.off('moveend', this.render);
+      // this.map.off('zoomstart', this.stop);
+      // this.map.off('zoomend', this.render);
+      // this.map.off('rotatestart', this.stop);
+      // this.map.off('rotateend', this.render);
+      // this.map.off('pitchstart', this.stop);
+      // this.map.off('pitchend', this.render);
+    }
+
+    resizeCanvas(canvas) {
+      const mapboxCanvas = this.map.getCanvas();
+
+      // @ts-ignore
+      const { width, height } = this.map.transform;
+
+      const pixel = this.devicePixelRatio;
+
+      canvas.width = width * pixel;
+      canvas.height = height * pixel;
+      canvas.style.width = mapboxCanvas.style.width;
+      canvas.style.height = mapboxCanvas.style.height;
+    }
+
+    initialize() {
+      const canvasContainer = this.map.getCanvasContainer();
+      const mapboxCanvas = this.map.getCanvas();
+      const canvasOverlay = document.createElement('canvas');
+
+      // @ts-ignore
+      const { width, height } = this.map.transform;
+
+      const pixel = this.devicePixelRatio;
+
+      canvasOverlay.width = width * pixel;
+      canvasOverlay.height = height * pixel;
+
+      canvasOverlay.style.position = 'absolute';
+      canvasOverlay.className = 'mapbox-overlay-canvas';
+      canvasOverlay.style.width = mapboxCanvas.style.width;
+      canvasOverlay.style.height = mapboxCanvas.style.height;
+      canvasContainer.appendChild(canvasOverlay);
+
+      return canvasOverlay;
+    }
+
+    render() {}
+
+    project(coordinates) {
+      if (this.map !== undefined) {
+        const lnglat = this.map.project(new mapboxgl.LngLat(coordinates[0], coordinates[1]));
+        const {x} = lnglat;
+        const {y} = lnglat;
+        return [
+          x * this.devicePixelRatio,
+          y * this.devicePixelRatio,
+        ];
+      }
+      return coordinates;
+    }
+
+    unproject(pixel) {
+      if (this.map !== undefined) {
+        const lnglat = this.map.unproject(new mapboxgl.Point(pixel[0], pixel[1]));
+        return [lnglat.lng, lnglat.lat];
+      }
+      return pixel;
+    }
+
+    intersectsCoordinate(coordinate) {
+      const bounds = this.map.getBounds();
+      // @ts-ignore
+      const latRange = this.map?.transform?.latRange;
+      if (latRange) {
+        if (coordinate[1] > latRange[1] || coordinate[1] < latRange[0]) return false;
+      }
+      return bounds.contains(new mapboxgl.LngLat(coordinate[0], coordinate[1]));
+      // return true;
+    }
+
+    clear() {
+      if (this.canvas) {
+        const ctx = this.canvas.getContext('2d');
+        ctx && ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+      }
+
+      if (this.canvas2) {
+        const ctx = this.canvas2.getContext('2d');
+        ctx && ctx.clearRect(0, 0, this.canvas2.width, this.canvas2.height);
+      }
+    }
+
+    setMap(map) {
+      this.map = map;
+      return this;
+    }
+
+    getMap() {
+      return this.map;
+    }
+
+    addTo(map) {
+      this.onAdd(map);
+    }
+
+    remove() {
+      if (this.canvas) {
+        removeDomNode(this.canvas);
+        this.canvas = null;
+      }
+
+      if (this.canvas2) {
+        removeDomNode(this.canvas2);
+        this.canvas2 = null;
+      }
+    }
+  }
+</script>
+<script>
 
   const SCALE_MAX_LENGTH = 11;
   const CLEAR_COLOR = [0, 0, 0, 0];
@@ -147,14 +349,10 @@
       // const maxRepeatsY = Math.floor(maxRenderbufferSize / this.canvas.height);
 
       this.gradient = gradientMapper(this.options.gradient);
-      this.fboTexture = this.regl.texture({
-        width: this.canvas.width,
-        height: this.canvas.height,
-      });
+
       this.fbo = this.regl.framebuffer({
         width: this.canvas.width,
         height: this.canvas.height,
-        colorTexture: this.fboTexture
       });
 
       this.originData = [];
@@ -337,10 +535,6 @@ void main() {
       const { max, heatOpacity, size, blur } = this.options;
       this.clear();
 
-      // this.fbo({
-      //   color: this.fboTexture
-      // });
-
       this.gradientCommand({
         // uniforms
         uDensity: this.pixelRatio,
@@ -388,7 +582,6 @@ void main() {
         },
 
         drawCont: data.positions.length / 2,
-        // fbo: this.fbo,
         ...this.renderUniforms,
       });
 
@@ -397,7 +590,7 @@ void main() {
         opacity: heatOpacity,
         colorScale: this.gradient.value,
         colorScaleLength: this.gradient.length,
-        uFramebuffer: this.fboTexture,
+        uFramebuffer: this.fbo,
         canvasSize: [this.canvas.width, this.canvas.height],
         // attributes
         aTexCoord: {
@@ -452,6 +645,14 @@ void main() {
     }
 
     clear() {
+      if (this.regl) {
+        this.regl.clear({
+          color: [0, 0, 0, 0],
+          depth: 1,
+          stencil: 0,
+          framebuffer: this.fbo,
+        })
+      }
       return this;
     }
 
@@ -545,30 +746,30 @@ void main() {
 
   const data = generateData(1000);
 
-  class CustomLayer {
+  class CustomLayer extends Overlay {
     constructor(id, data, options) {
-      this.id = id || 'custom-layer';
-      this.type = 'custom';
-      this.renderingMode = '2d';
-
+      super(id, { ...defaultOptions, ...options});
       this.data = data;
       this.needUpdateData = true;
 
       this.options = { ...options };
     }
 
-    onAdd(m, gl) {
-      this.map = m;
+    onAdd(map) {
+      super.onAdd(map);
+
+      const gl = this.canvas.getContext('webgl');
+      this.gl = gl;
 
       const opt = this?.getHeatMapOptions();
       this.heatmap = new Heatmap(gl, opt);
     }
 
-    render(gl) {
+    render() {
       const center = this.map.getCenter();
       const centerArray = center.toArray();
       const zoom = this.map.getZoom();
-      const { width, height } = gl.canvas;
+      const { width, height } = this.map.transform;
 
       // console.log(scale);
       // Mapbox passes us a projection matrix
@@ -586,8 +787,6 @@ void main() {
 
       const projectUniforms = mercatorProj.getUniforms({
         viewport: this.viewport,
-        devicePixelRatio: 1,
-        projectOffsetZoom: 12
       });
 
       const uniforms = {
@@ -699,7 +898,7 @@ void main() {
         };
 
         const layer = new CustomLayer('heatmap', data, options);
-        this.map.addLayer(layer);
+        layer.addTo(this.map);
 
         const gui = new dat.GUI();
 

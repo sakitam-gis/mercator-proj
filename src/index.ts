@@ -28,8 +28,10 @@ const ZERO_VECTOR: [number, number, number, number] | Float32Array = [0, 0, 0, 0
 const VECTOR_TO_POINT_MATRIX = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0];
 const IDENTITY_MATRIX = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
 const DEFAULT_COORDINATE_ORIGIN = [0, 0, 0];
+
 const INITIAL_MODULE_OPTIONS = {
-  devicePixelRatio: 1,
+  // @ts-ignore
+  devicePixelRatio: (window.devicePixelRatio || (window.screen?.deviceXDPI / window.screen?.logicalXDPI) || 1),
 };
 
 export function isEqual(a: any, b: any): boolean {
@@ -272,7 +274,7 @@ function calculateViewportUniforms(options: IOptions) {
  */
 export function getUniformsFromViewport({
   viewport,
-  devicePixelRatio = 1,
+  devicePixelRatio,
   modelMatrix = null,
   projectOffsetZoom = 12,
 }: Partial<IOptions> = {}) {

@@ -72,9 +72,6 @@ module.exports = [
         declaration: true,
         tsconfigOverride: {
           sourceMap: true,
-          compilerOptions: {
-            module: 'esnext',
-          },
         },
       }),
       nodeResolve({
