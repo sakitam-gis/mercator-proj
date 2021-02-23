@@ -13,18 +13,19 @@
 <body>
 <div id="map"></div>
 <script src="https://api.mapbox.com/mapbox-gl-js/v1.12.0/mapbox-gl.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/regl@2.0.1/dist/regl.js"></script>
 <script src="../../dist/mercator-proj.js?data=1"></script>
-<script>
+<script type="module">
+  import REGL from 'https://cdn.skypack.dev/regl';
+  // import mercatorProj from 'https://cdn.skypack.dev/mercator-proj';
   mapboxgl.accessToken = "pk.eyJ1Ijoic21pbGVmZGQiLCJhIjoiY2tnN2Iybm91MDIzajJ5bHM1N3o5YzgybiJ9.KI0dCXX1rAfcLO1iwGKwHg"; // eslint-disable-line
 
   const coordinates = [
-    // [90.55771935117303, 39.90989714727357],
-    // [102.51084435117338, 24.846755709924764],
-    // [114.46396935117377, 39.232415634606724]
-    [114.10487758204431, 38.88828732993963],
-    [114.14962984763685, 38.8959443667861],
-    [114.14943694993866, 38.87387184490794]
+    [90.55771935117303, 39.90989714727357],
+    [102.51084435117338, 24.846755709924764],
+    [114.46396935117377, 39.232415634606724]
+    // [114.10487758204431, 38.88828732993963],
+    // [114.14962984763685, 38.8959443667861],
+    // [114.14943694993866, 38.87387184490794]
   ];
 
   class CustomLayer {
@@ -39,7 +40,7 @@
     onAdd(m, gl) {
       this.map = m;
 
-      this.regl = createREGL({
+      this.regl = REGL({
         gl: gl,
       });
 
@@ -117,22 +118,28 @@ void main(void) {
         zoom,
         pitch: this.map.getPitch(),
         bearing: this.map.getBearing(),
+        repeat: true
       });
 
-      const projectUniforms = mercatorProj.getUniforms({
-        viewport: this.viewport,
-      });
+      const subViewports = this.viewport.subViewports;
 
-      const uniforms = {
-        u_zoom: zoom,
-        u_radiusScale: projectUniforms.project_metersPerPixel,
-        ...projectUniforms,
-      };
+      for (let i = 0; i < subViewports.length; i++) {
+        const viewport = subViewports[i];
+        const projectUniforms = mercatorProj.getUniforms({
+          viewport: viewport,
+        });
 
-      window.uniforms = uniforms;
-      window.viewport = this.viewport;
+        const uniforms = {
+          u_zoom: zoom,
+          u_radiusScale: projectUniforms.project_metersPerPixel,
+          ...projectUniforms,
+        };
 
-      this.drawTriangle(uniforms);
+        window.uniforms = uniforms;
+        window.viewport = this.viewport;
+
+        this.drawTriangle(uniforms);
+      }
     }
 
     onRemove() {
@@ -177,15 +184,15 @@ void main(void) {
           }
         });
 
-        this.map.addLayer({
-          'id': 'points',
-          'type': 'circle',
-          'source': 'points',
-          'paint': {
-            'circle-radius': 2,
-            'circle-color': '#ff2200'
-          }
-        });
+        // this.map.addLayer({
+        //   'id': 'points',
+        //   'type': 'circle',
+        //   'source': 'points',
+        //   'paint': {
+        //     'circle-radius': 2,
+        //     'circle-color': '#ff2200'
+        //   }
+        // });
       });
 
       window.map = this.map;

@@ -33,8 +33,8 @@ function identifyGPUVendor(vendor: string, renderer: string) {
 
 function getContextInfo(gl: IGl) {
   const info = gl.getExtension('WEBGL_debug_renderer_info');
-  const vendor = gl.getParameter((info && info.UNMASKED_VENDOR_WEBGL) || GL_VENDOR);
-  const renderer = gl.getParameter((info && info.UNMASKED_RENDERER_WEBGL) || GL_RENDERER);
+  const vendor = gl.getParameter((info?.UNMASKED_VENDOR_WEBGL) || GL_VENDOR);
+  const renderer = gl.getParameter((info?.UNMASKED_RENDERER_WEBGL) || GL_RENDERER);
   const gpuVendor = identifyGPUVendor(vendor, renderer);
   return {
     gpuVendor: gpuVendor,
@@ -53,19 +53,20 @@ export function getPlatformShaderDefines(gl: IGl) {
       return '#define NVIDIA_GPU\n// Nvidia optimizes away the calculation necessary for emulated fp64\n#define LUMA_FP64_CODE_ELIMINATION_WORKAROUND 1\n';
 
     case 'intel':
-      return "#define INTEL_GPU\n// Intel optimizes away the calculation necessary for emulated fp64\n#define LUMA_FP64_CODE_ELIMINATION_WORKAROUND 1\n// Intel's built-in 'tan' function doesn't have acceptable precision\n#define LUMA_FP32_TAN_PRECISION_WORKAROUND 1\n// Intel GPU doesn't have full 32 bits precision in same cases, causes overflow\n#define LUMA_FP64_HIGH_BITS_OVERFLOW_WORKAROUND 1\n";
+      return '#define INTEL_GPU\n// Intel optimizes away the calculation necessary for emulated fp64\n#define LUMA_FP64_CODE_ELIMINATION_WORKAROUND 1\n// Intel\'s built-in \'tan\' function doesn\'t have acceptable precision\n#define LUMA_FP32_TAN_PRECISION_WORKAROUND 1\n// Intel GPU doesn\'t have full 32 bits precision in same cases, causes overflow\n#define LUMA_FP64_HIGH_BITS_OVERFLOW_WORKAROUND 1\n';
 
     case 'amd':
       return '#define AMD_GPU\n';
 
     default:
-      return "#define DEFAULT_GPU\n// Prevent driver from optimizing away the calculation necessary for emulated fp64\n#define LUMA_FP64_CODE_ELIMINATION_WORKAROUND 1\n// Intel's built-in 'tan' function doesn't have acceptable precision\n#define LUMA_FP32_TAN_PRECISION_WORKAROUND 1\n// Intel GPU doesn't have full 32 bits precision in same cases, causes overflow\n#define LUMA_FP64_HIGH_BITS_OVERFLOW_WORKAROUND 1\n";
+      return '#define DEFAULT_GPU\n// Prevent driver from optimizing away the calculation necessary for emulated fp64\n#define LUMA_FP64_CODE_ELIMINATION_WORKAROUND 1\n// Intel\'s built-in \'tan\' function doesn\'t have acceptable precision\n#define LUMA_FP32_TAN_PRECISION_WORKAROUND 1\n// Intel GPU doesn\'t have full 32 bits precision in same cases, causes overflow\n#define LUMA_FP64_HIGH_BITS_OVERFLOW_WORKAROUND 1\n';
   }
 }
 
 export function getApplicationDefines(defines: IDef = {}) {
   let count = 0;
   let sourceText = '';
+  // eslint-disable-next-line guard-for-in
   for (const define in defines) {
     if (count === 0) {
       sourceText += '\n// APPLICATION DEFINES\n';
