@@ -6,9 +6,7 @@ module.exports = {
   },
   testEnvironment: 'jsdom',
   testRegex: '(/__tests__/.*|\\.(test|spec))\\.(ts|tsx|js)$',
-  moduleFileExtensions: [
-    'ts', 'tsx', 'js', 'jsx', 'json', 'node',
-  ],
+  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node',],
   testPathIgnorePatterns: ['/dist/', '/node_modules/'],
   watchPathIgnorePatterns: ['/dist/', '/node_modules/'],
   collectCoverage: true,

@@ -1,12 +1,13 @@
-import WebMercatorViewport from './viewport/viewport';
-import {
-  getDistanceScales,
-} from './viewport/web-mercator-utils';
+import WebMercatorViewport, {
+  PROJECTION_MODE,
+  COORDINATE_SYSTEM,
+} from './viewport/viewport';
 import { getPlatformShaderDefines, getApplicationDefines, FRAGMENT_SHADER_PROLOGUE } from './utils';
 import projectShader from './project.glsl';
 import fp32shader from './fp32.glsl';
+import { createMat4 } from './viewport/math-utils';
 
-export type vec4 = [number, number, number, number] | Float32Array;
+export type vec4 = [number, number, number, number] | Float32Array | number[];
 export type mat4 = number[]
   | [number, number, number, number,
   number, number, number, number,
@@ -18,7 +19,9 @@ export interface IOptions {
   viewport: WebMercatorViewport;
   devicePixelRatio: number;
   modelMatrix: number[] | null;
-  projectOffsetZoom: number;
+  coordinateSystem: COORDINATE_SYSTEM;
+  coordinateOrigin?: number[];
+  autoWrapLongitude?: boolean;
 }
 
 // To quickly set a vector to zero
@@ -26,6 +29,7 @@ const ZERO_VECTOR: [number, number, number, number] | Float32Array = [0, 0, 0, 0
 const VECTOR_TO_POINT_MATRIX = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0];
 const IDENTITY_MATRIX = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
 const DEFAULT_COORDINATE_ORIGIN = [0, 0, 0];
+const DEFAULT_PIXELS_PER_UNIT2: number[] | undefined = [0, 0, 0];
 
 const INITIAL_MODULE_OPTIONS = {
   // @ts-ignore
@@ -226,18 +230,83 @@ export function invert(out: vec4, a: vec4) {
 
 const getMemoizedViewportUniforms = memoize(calculateViewportUniforms);
 
-function calculateMatrixAndOffset(viewport: WebMercatorViewport, offsetMode: boolean) {
-  // @ts-ignore
+export function getOffsetOrigin(
+  viewport: WebMercatorViewport,
+  coordinateSystem: COORDINATE_SYSTEM,
+  coordinateOrigin = DEFAULT_COORDINATE_ORIGIN
+) {
+  let shaderCoordinateOrigin = coordinateOrigin;
+  let geospatialOrigin;
+  let offsetMode = true;
+
+  if (
+    coordinateSystem === COORDINATE_SYSTEM.LNGLAT_OFFSETS ||
+    coordinateSystem === COORDINATE_SYSTEM.METER_OFFSETS
+  ) {
+    geospatialOrigin = coordinateOrigin;
+  } else {
+    geospatialOrigin = viewport.isGeospatial
+      ? [Math.fround(viewport.longitude), Math.fround(viewport.latitude), 0]
+      : null;
+  }
+
+  switch (viewport.projectionMode) {
+    case PROJECTION_MODE.WEB_MERCATOR:
+      if (
+        coordinateSystem === COORDINATE_SYSTEM.LNGLAT ||
+        coordinateSystem === COORDINATE_SYSTEM.CARTESIAN
+      ) {
+        offsetMode = false;
+      }
+      break;
+
+    case PROJECTION_MODE.WEB_MERCATOR_AUTO_OFFSET:
+      if (coordinateSystem === COORDINATE_SYSTEM.LNGLAT) {
+        // viewport center in world space
+        shaderCoordinateOrigin = geospatialOrigin as number[];
+      } else if (coordinateSystem === COORDINATE_SYSTEM.CARTESIAN) {
+        // viewport center in common space
+        shaderCoordinateOrigin = [
+          Math.fround(viewport.center[0]),
+          Math.fround(viewport.center[1]),
+          0
+        ];
+        // Geospatial origin (wgs84) must match shaderCoordinateOrigin (common)
+        geospatialOrigin = viewport.unprojectPosition(shaderCoordinateOrigin);
+        shaderCoordinateOrigin[0] -= coordinateOrigin[0];
+        shaderCoordinateOrigin[1] -= coordinateOrigin[1];
+        shaderCoordinateOrigin[2] -= coordinateOrigin[2];
+      }
+      break;
+
+    case PROJECTION_MODE.IDENTITY:
+      shaderCoordinateOrigin = viewport.position.map(Math.fround);
+      break;
+
+    default:
+      // Unknown projection mode
+      offsetMode = false;
+  }
+
+  shaderCoordinateOrigin[2] = shaderCoordinateOrigin[2] || 0;
+
+  return {geospatialOrigin, shaderCoordinateOrigin, offsetMode};
+}
+
+function calculateMatrixAndOffset(viewport: WebMercatorViewport, coordinateSystem: COORDINATE_SYSTEM, coordinateOrigin?: number[]) {
   const { viewMatrixUncentered, projectionMatrix } = viewport;
   // eslint-disable-next-line prefer-const
   let {viewMatrix, viewProjectionMatrix} = viewport;
 
   let projectionCenter = ZERO_VECTOR;
-  const geospatialOrigin = [Math.fround(viewport.longitude), Math.fround(viewport.latitude), 0];
-  let shaderCoordinateOrigin = DEFAULT_COORDINATE_ORIGIN;
+  let cameraPosCommon = viewport.cameraPosition;
+  const {geospatialOrigin, shaderCoordinateOrigin, offsetMode} = getOffsetOrigin(
+    viewport,
+    coordinateSystem,
+    coordinateOrigin
+  );
 
   if (offsetMode) {
-    shaderCoordinateOrigin = geospatialOrigin;
     // Calculate transformed projectionCenter (using 64 bit precision JS)
     // This is the key to offset mode precision
     // (avoids doing this addition in 32 bit precision in GLSL)
@@ -245,6 +314,12 @@ function calculateMatrixAndOffset(viewport: WebMercatorViewport, offsetMode: boo
     const positionCommonSpace = viewport?.projectPosition(
       geospatialOrigin || shaderCoordinateOrigin
     );
+
+    cameraPosCommon = [
+      cameraPosCommon[0] - positionCommonSpace[0],
+      cameraPosCommon[1] - positionCommonSpace[1],
+      cameraPosCommon[2] - positionCommonSpace[2]
+    ];
 
     positionCommonSpace[3] = 1;
 
@@ -260,9 +335,9 @@ function calculateMatrixAndOffset(viewport: WebMercatorViewport, offsetMode: boo
     // viewMatrix = new Matrix4(viewMatrixUncentered || viewMatrix)
     //   .multiplyRight(VECTOR_TO_POINT_MATRIX);
     // @ts-ignore
-    viewProjectionMatrix = multiply([], projectionMatrix, viewMatrix);
+    viewProjectionMatrix = multiply(createMat4(), projectionMatrix, viewMatrix);
     // @ts-ignore
-    viewProjectionMatrix = multiply([], viewProjectionMatrix, VECTOR_TO_POINT_MATRIX);
+    viewProjectionMatrix = multiply(createMat4(), viewProjectionMatrix, VECTOR_TO_POINT_MATRIX);
   }
 
   return {
@@ -271,6 +346,7 @@ function calculateMatrixAndOffset(viewport: WebMercatorViewport, offsetMode: boo
     projectionCenter,
     geospatialOrigin,
     shaderCoordinateOrigin,
+    cameraPosCommon,
   };
 }
 
@@ -278,30 +354,27 @@ function calculateViewportUniforms(options: IOptions) {
   const {
     viewport,
     devicePixelRatio,
-    projectOffsetZoom = 12,
+    coordinateSystem,
+    coordinateOrigin,
   } = options;
-
-  const offsetMode = viewport.zoom >= projectOffsetZoom;
 
   const {
     projectionCenter,
     viewProjectionMatrix,
     shaderCoordinateOrigin,
     geospatialOrigin,
-  } = calculateMatrixAndOffset(viewport, offsetMode);
+    cameraPosCommon,
+  } = calculateMatrixAndOffset(viewport, coordinateSystem, coordinateOrigin);
 
   // Calculate projection pixels per unit
   const { distanceScales } = viewport;
 
   const viewportSize = [viewport.width * devicePixelRatio, viewport.height * devicePixelRatio];
-  // const distanceScalesAtOrigin = viewport.getDistanceScales(geospatialOrigin);
-  const distanceScalesAtOrigin = getDistanceScales({
-    longitude: geospatialOrigin[0],
-    latitude: geospatialOrigin[1],
-    highPrecision: true
-  });
 
-  return {
+  const uniforms = {
+    project_uCoordinateSystem: coordinateSystem,
+    project_uProjectionMode: viewport.projectionMode,
+
     project_uCoordinateOrigin: shaderCoordinateOrigin,
     project_uCenter: projectionCenter,
     project_uAntimeridian: (viewport.longitude || 0) - 180,
@@ -314,14 +387,52 @@ function calculateViewportUniforms(options: IOptions) {
     // @ts-ignore
     project_uFocalDistance: viewport.focalDistance || 1,
     project_uCommonUnitsPerMeter: distanceScales.unitsPerMeter,
-    project_uCommonUnitsPerWorldUnit: distanceScalesAtOrigin.unitsPerDegree,
-    project_uCommonUnitsPerWorldUnit2: distanceScalesAtOrigin.unitsPerDegree2,
+
+    project_uCommonUnitsPerWorldUnit: distanceScales.unitsPerMeter,
+    project_uCommonUnitsPerWorldUnit2: DEFAULT_PIXELS_PER_UNIT2,
+
     project_uScale: viewport.scale, // This is the mercator scale (2 ** zoom)
     project_uViewProjectionMatrix: viewProjectionMatrix,
-    project_uInverseViewProjectionMatrix: invert(new Float32Array(16), viewProjectionMatrix as unknown as Float32Array),
+    project_uInverseViewProjectionMatrix: invert(createMat4(), viewProjectionMatrix as unknown as Float32Array),
     // @ts-ignore
     project_metersPerPixel: distanceScales.metersPerUnit[2] / viewport.scale,
+
+    project_uCameraPosition: cameraPosCommon
   };
+
+  if (geospatialOrigin) {
+    const distanceScalesAtOrigin = viewport.getDistanceScales(geospatialOrigin);
+    if (distanceScalesAtOrigin) {
+      switch (coordinateSystem) {
+        case COORDINATE_SYSTEM.METER_OFFSETS:
+          uniforms.project_uCommonUnitsPerWorldUnit = distanceScalesAtOrigin.unitsPerMeter;
+          uniforms.project_uCommonUnitsPerWorldUnit2 = distanceScalesAtOrigin.unitsPerMeter2;
+          break;
+
+        case COORDINATE_SYSTEM.LNGLAT:
+        case COORDINATE_SYSTEM.LNGLAT_OFFSETS:
+          uniforms.project_uCommonUnitsPerWorldUnit = distanceScalesAtOrigin.unitsPerDegree;
+          uniforms.project_uCommonUnitsPerWorldUnit2 = distanceScalesAtOrigin.unitsPerDegree2;
+          break;
+
+        // a.k.a "preprojected" positions
+        case COORDINATE_SYSTEM.CARTESIAN:
+          uniforms.project_uCommonUnitsPerWorldUnit = [1, 1, distanceScalesAtOrigin.unitsPerMeter[2]];
+          uniforms.project_uCommonUnitsPerWorldUnit2 = [
+            0,
+            0,
+            // @ts-ignore
+            distanceScalesAtOrigin.unitsPerMeter2[2]
+          ];
+          break;
+
+        default:
+          break;
+      }
+    }
+  }
+
+  return uniforms;
 }
 
 /**
@@ -330,27 +441,43 @@ function calculateViewportUniforms(options: IOptions) {
  * @param viewport
  * @param devicePixelRatio
  * @param modelMatrix
- * @param projectOffsetZoom
+ * @param coordinateSystem
+ * @param coordinateOrigin
+ * @param autoWrapLongitude
  * @return {Float32Array} - 4x4 projection matrix that can be used in shaders
  */
 export function getUniformsFromViewport({
   viewport,
   devicePixelRatio = INITIAL_MODULE_OPTIONS.devicePixelRatio,
   modelMatrix = null,
-  projectOffsetZoom = 12,
+
+  coordinateSystem = COORDINATE_SYSTEM.DEFAULT,
+  coordinateOrigin,
+
+  autoWrapLongitude = false,
 }: IOptions) {
+  if (coordinateSystem === COORDINATE_SYSTEM.DEFAULT) {
+    coordinateSystem = viewport.isGeospatial
+      ? COORDINATE_SYSTEM.LNGLAT
+      : COORDINATE_SYSTEM.CARTESIAN;
+  }
+
   const uniforms = getMemoizedViewportUniforms({
     viewport,
     devicePixelRatio,
-    projectOffsetZoom,
+    coordinateSystem,
+    coordinateOrigin
   });
 
+  uniforms.project_uWrapLongitude = autoWrapLongitude;
   uniforms.project_uModelMatrix = modelMatrix || IDENTITY_MATRIX;
 
   return uniforms;
 }
 
 export type MercatorUniformKeys = [
+  'project_uCoordinateSystem',
+  'project_uProjectionMode',
   'project_uCoordinateOrigin',
   'project_uCenter',
   'project_uAntimeridian',
@@ -368,6 +495,8 @@ export type MercatorUniformKeys = [
 
 export function getUniformKeys(): MercatorUniformKeys {
   return [
+    'project_uCoordinateSystem',
+    'project_uProjectionMode',
     'project_uCoordinateOrigin',
     'project_uCenter',
     'project_uAntimeridian',

@@ -1,6 +1,6 @@
 {
   "name": "mercator-proj",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "author": "sakitam-fdd <smilefdd@gmail.com>",
   "homepage": "https://github.com/sakitam-gis/mercator-proj",
   "publishConfig": {
@@ -16,8 +16,8 @@
     "tsc": "tsc --project tsconfig.json --declaration --declarationDir dist/types",
     "dev": "cross-env NODE_ENV=development yarn bili --watch --env.NODE_ENV development",
     "build": "cross-env NODE_ENV=production yarn bili --env.NODE_ENV production",
-    "docs": "typedoc src/index.ts --out docs/api --theme minimal --mode file --exclude '**/*.glsl'",
-    "test": ""
+    "docs": "typedoc src/index.ts --out docs/api --theme minimal --mode file --exclude \"src/*.glsl\"",
+    "test": "jest --watchAll=false --no-watch"
   },
   "keywords": [
     "glsl",

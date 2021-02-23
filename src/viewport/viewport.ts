@@ -3,7 +3,7 @@ import * as mat4 from 'gl-matrix/mat4';
 // @ts-ignore
 import { transformMat4 } from 'gl-matrix/vec3';
 // @ts-ignore
-import { add, negate } from 'gl-matrix/vec2';
+import * as vec2 from 'gl-matrix/vec2';
 import { equals } from './common';
 import { createMat4, getCameraPosition, getFrustumPlanes, FrustumPlanesInterface } from './math-utils';
 
@@ -20,15 +20,35 @@ import {
   worldToPixels
 } from './web-mercator-utils';
 
-const PROJECTION_MODE = {
-  WEB_MERCATOR: 1,
-  GLOBE: 2,
+
+export enum PROJECTION_MODE {
+  WEB_MERCATOR = 1,
+  GLOBE = 2,
 
   // This is automatically assigned by the project module
-  WEB_MERCATOR_AUTO_OFFSET: 4,
+  WEB_MERCATOR_AUTO_OFFSET = 4,
 
-  IDENTITY: 0
-};
+  IDENTITY = 0
+}
+
+export enum COORDINATE_SYSTEM {
+// `LNGLAT` if rendering into a geospatial viewport, `CARTESIAN` otherwise
+  DEFAULT = -1,
+  // Positions are interpreted as [lng, lat, elevation]
+  // lng lat are degrees, elevation is meters. distances as meters.
+  LNGLAT = 1,
+
+  // Positions are interpreted as meter offsets, distances as meters
+  METER_OFFSETS = 2,
+
+  // Positions are interpreted as lng lat offsets: [deltaLng, deltaLat, elevation]
+  // deltaLng, deltaLat are delta degrees, elevation is meters.
+  // distances as meters.
+  LNGLAT_OFFSETS = 3,
+
+  // Non-geospatial
+  CARTESIAN = 0
+}
 
 const DEGREES_TO_RADIANS = Math.PI / 180;
 
@@ -87,6 +107,7 @@ export interface IViewport extends IViewportOpts {
   farZMultiplier: number;
   altitude: number;
   worldOffset: number;
+  projectOffsetZoom: number;
   repeat: boolean;
 }
 
@@ -117,9 +138,10 @@ export default class WebMercatorViewport {
   public cameraPosition: number[];
   public focalDistance: number;
   public distanceScales: IDistanceScales;
+  public position: number[];
+  public projectOffsetZoom: number;
 
   private readonly _subViewports: WebMercatorViewport[] | undefined;
-  private position: number[];
   private meterOffset: number[];
   private x: number;
   private y: number;
@@ -147,7 +169,8 @@ export default class WebMercatorViewport {
       orthographic = false,
 
       repeat = false,
-      worldOffset = 0
+      worldOffset = 0,
+      projectOffsetZoom = 12,
     } = opts;
 
     let {width, height, altitude = 1.5} = opts;
@@ -221,6 +244,7 @@ export default class WebMercatorViewport {
     this.pitch = pitch;
     this.bearing = bearing;
     this.altitude = altitude;
+    this.projectOffsetZoom = projectOffsetZoom;
 
     this.orthographic = orthographic;
 
@@ -254,7 +278,7 @@ export default class WebMercatorViewport {
 
   get projectionMode() {
     if (this.isGeospatial) {
-      return this.zoom < 12
+      return this.zoom < this.projectOffsetZoom
         ? PROJECTION_MODE.WEB_MERCATOR
         : PROJECTION_MODE.WEB_MERCATOR_AUTO_OFFSET;
     }
@@ -453,7 +477,7 @@ export default class WebMercatorViewport {
     near?: number;
     far?: number;
   }) {
-    const m = new Float32Array(16);
+    const m = createMat4();
     if (orthographic) {
       if (fovyRadians > Math.PI * 2) {
         throw Error('radians');
@@ -590,7 +614,7 @@ export default class WebMercatorViewport {
 
     const m = createMat4();
 
-    this.pixelUnprojectionMatrix = mat4.invert(m, m, this.pixelProjectionMatrix);
+    this.pixelUnprojectionMatrix = mat4.invert(m, this.pixelProjectionMatrix);
     if (!this.pixelUnprojectionMatrix) {
       console.warn('Pixel project matrix not invertible');
     }
@@ -670,8 +694,8 @@ export default class WebMercatorViewport {
     const fromLocation = pixelsToWorld(pos, this.pixelUnprojectionMatrix);
     const toLocation = this.projectFlat(lngLat);
 
-    const translate = add([], toLocation, negate([], fromLocation));
-    const newCenter = add([], this.center, translate);
+    const translate = vec2.add([], toLocation, vec2.negate([], fromLocation));
+    const newCenter = vec2.add([], this.center, translate);
 
     return this.unprojectFlat(newCenter);
   }

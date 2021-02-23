@@ -6,3 +6,16 @@ site/
 babel.config.js
 .idea/
 .vscode/
+
+coverage/
+.browserslistrc
+.editorconfig
+.eslintignore
+.eslintrc.js
+.gitignore
+.npmignore
+.prettierignore
+.prettierrc
+.travis.yml
+bili.config.ts
+jest.config.js

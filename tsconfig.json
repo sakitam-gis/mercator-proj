@@ -33,6 +33,7 @@
     "typings.d.ts"
   ],
   "exclude": [
+    "**/*.glsl",
     "dist",
     "**/__tests__/**/*",
     "**/*.spec.*",
