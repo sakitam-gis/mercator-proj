@@ -13,7 +13,7 @@
 <body>
 <div id="map"></div>
 <script src="https://api.mapbox.com/mapbox-gl-js/v1.12.0/mapbox-gl.js"></script>
-<script src="../../dist/mercator-proj.js?data=1"></script>
+<script src="../../dist/mercator-proj.js?data=2"></script>
 <script type="module">
   import REGL from 'https://cdn.skypack.dev/regl';
   // import mercatorProj from 'https://cdn.skypack.dev/mercator-proj';
@@ -154,12 +154,11 @@ void main(void) {
         container: 'map',
         style: 'mapbox://styles/mapbox/dark-v10',
         // center: [113.5958870877729, 38.27348780477419],
-        center: [114.17610137108795, 38.89409734122748],
-        zoom: 0,
+        center: [102.51084435117338, 24.846755709924764], // [114.17610137108795, 38.89409734122748],
+        zoom: 24,
         // zoom: 2,
         pitch,
         bearing,
-        // zoom: 24,
         maxZoom: 24,
         antialias: true
       });
@@ -184,15 +183,15 @@ void main(void) {
           }
         });
 
-        // this.map.addLayer({
-        //   'id': 'points',
-        //   'type': 'circle',
-        //   'source': 'points',
-        //   'paint': {
-        //     'circle-radius': 2,
-        //     'circle-color': '#ff2200'
-        //   }
-        // });
+        this.map.addLayer({
+          'id': 'points',
+          'type': 'circle',
+          'source': 'points',
+          'paint': {
+            'circle-radius': 2,
+            'circle-color': '#ff2200'
+          }
+        });
       });
 
       window.map = this.map;

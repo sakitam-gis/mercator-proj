@@ -1,6 +1,7 @@
 #define PROJECT_TILE_SIZE 512.0
 #define PROJECT_PI 3.141592653589793
-#define PROJECT_EARTH_RADIUS 6371008.8
+//#define PROJECT_EARTH_RADIUS 6371008.8
+#define PROJECT_EARTH_RADIUS 6370972.0
 #define PROJECT_WORLD_SCALE (PROJECT_TILE_SIZE / (PROJECT_PI * 2.0))
 #define PROJECT_EARTH_CIRCUMFRENCE (2.0 * PROJECT_PI * PROJECT_EARTH_RADIUS)
 
@@ -19,6 +20,7 @@ uniform vec3 project_uCommonUnitsPerWorldUnit2;
 uniform vec2 project_uViewportSize;
 uniform float project_uDevicePixelRatio;
 uniform float project_uFocalDistance;
+uniform bool project_uWrapLongitude;
 
 const vec3 ZERO_64_LOW = vec3(0.0);
 
@@ -56,12 +58,16 @@ vec4 project_offset(vec4 offset) {
 // Projecting positions - non-linear projection: lnglats => unit tile [0-1, 0-1]
 vec2 project_mercator(vec2 lnglat) {
   float x = lnglat.x;
+  if (project_uWrapLongitude) {
+    x = mod(x + 180., 360.0) - 180.;
+  }
+  float y = clamp(lnglat.y, -89.9, 89.9);
 //  (Math.PI / 180 * map.getCenter().toArray()[0] + Math.PI)
 //  (Math.PI + Math.log(Math.tan(Math.PI * 0.25 + (Math.PI / 180 * map.getCenter().toArray()[1]) * 0.5)))
 //  (Math.PI - Math.log(Math.tan(Math.PI * 0.25 - (Math.PI / 180 * map.getCenter().toArray()[1]) * 0.5)))
   return vec2(
     radians(x) + PROJECT_PI,
-    PROJECT_PI + log(tan_fp32(PROJECT_PI * 0.25 + radians(lnglat.y) * 0.5))
+    PROJECT_PI + log(tan_fp32(PROJECT_PI * 0.25 + radians(y) * 0.5))
   );
 }
 

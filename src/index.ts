@@ -490,7 +490,9 @@ export type MercatorUniformKeys = [
   'project_uScale',
   'project_uViewProjectionMatrix',
   'project_metersPerPixel',
-  'project_uModelMatrix'
+  'project_uModelMatrix',
+  'project_uWrapLongitude',
+  'project_uCameraPosition'
 ];
 
 export function getUniformKeys(): MercatorUniformKeys {
@@ -509,7 +511,9 @@ export function getUniformKeys(): MercatorUniformKeys {
     'project_uScale',
     'project_uViewProjectionMatrix',
     'project_metersPerPixel',
-    'project_uModelMatrix'
+    'project_uModelMatrix',
+    'project_uWrapLongitude',
+    'project_uCameraPosition'
   ];
 }
 
