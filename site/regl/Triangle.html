@@ -13,20 +13,42 @@
 <body>
 <div id="map"></div>
 <script src="https://api.mapbox.com/mapbox-gl-js/v1.12.0/mapbox-gl.js"></script>
-<script src="../../dist/mercator-proj.js?data=2"></script>
+<script src="../../dist/mercator-proj.js"></script>
 <script type="module">
   import REGL from 'https://cdn.skypack.dev/regl';
   // import mercatorProj from 'https://cdn.skypack.dev/mercator-proj';
   mapboxgl.accessToken = "pk.eyJ1Ijoic21pbGVmZGQiLCJhIjoiY2tnN2Iybm91MDIzajJ5bHM1N3o5YzgybiJ9.KI0dCXX1rAfcLO1iwGKwHg"; // eslint-disable-line
 
+  const length = 1;
+  function random(min, max) {
+    return (Math.random() * (max - min)) + min;
+  }
+
+  function generateData (count) {
+    const data = [];
+    for (let i = 0; i < count; i++) {
+      let val = Math.random() * 512;
+      const x = random(-180, 179);
+      const y = random(-85, 85);
+      data.push([x, y, val]);
+    }
+    return data;
+  }
+
+  function generateColors (count) {
+    const data = [];
+    for (let i = 0; i < count; i++) {
+      data.push(random(0, 1), random(0, 1), random(0, 1));
+    }
+    return data;
+  }
+
   const coordinates = [
     [90.55771935117303, 39.90989714727357],
     [102.51084435117338, 24.846755709924764],
     [114.46396935117377, 39.232415634606724]
-    // [114.10487758204431, 38.88828732993963],
-    // [114.14962984763685, 38.8959443667861],
-    // [114.14943694993866, 38.87387184490794]
-  ];
+  ] || generateData(length * 3);
+  const colors = generateColors(length * 3);
 
   class CustomLayer {
     constructor(options) {
@@ -89,14 +111,14 @@ void main(void) {
           // regl.buffer creates a new array buffer object
           positions: this.regl.buffer(positions),
           precisionBits: this.regl.buffer(precisionData),
-          a_colors: this.regl.buffer([1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]),
+          a_colors: this.regl.buffer(colors),
         },
 
         uniforms: uniforms,
 
         // This tells regl the number of vertices to draw in this command
-        count: 3,
-        primitive: 'triangle'
+        count: length * 3,
+        primitive: 'triangles'
       });
     }
 
@@ -154,8 +176,8 @@ void main(void) {
         container: 'map',
         style: 'mapbox://styles/mapbox/dark-v10',
         // center: [113.5958870877729, 38.27348780477419],
-        center: [102.51084435117338, 24.846755709924764], // [114.17610137108795, 38.89409734122748],
-        zoom: 24,
+        center: coordinates[0], // [114.17610137108795, 38.89409734122748],
+        zoom: 22,
         // zoom: 2,
         pitch,
         bearing,

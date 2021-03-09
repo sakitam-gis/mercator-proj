@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8" />
+  <title>Triangle</title>
+  <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <link href="https://cdn.jsdelivr.net/npm/@sakitam-gis/mapbox-gl@1.20.0/dist/mapbox-gl.css" rel="stylesheet" />
+  <style>
+    body { margin: 0; padding: 0; }
+    #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+  </style>
+</head>
+<body>
+<div id="map"></div>
+<script src="https://cdn.jsdelivr.net/npm/@sakitam-gis/mapbox-gl@1.20.0/dist/mapbox-gl.js"></script>
+<script type="module">
+  import REGL from 'https://cdn.skypack.dev/regl';
+  import { mat4, vec4 } from 'https://cdn.skypack.dev/gl-matrix';
+  // import mercatorProj from 'https://cdn.skypack.dev/mercator-proj';
+  mapboxgl.accessToken = "pk.eyJ1Ijoic21pbGVmZGQiLCJhIjoiY2tnN2Iybm91MDIzajJ5bHM1N3o5YzgybiJ9.KI0dCXX1rAfcLO1iwGKwHg"; // eslint-disable-line
+
+  Promise.resolve().finally();
+  const EXTENT = 8192.0;
+
+  const length = 100;
+  function random(min, max) {
+    return (Math.random() * (max - min)) + min;
+  }
+
+  function generateData (count) {
+    const data = [];
+    for (let i = 0; i < count; i++) {
+      let val = Math.random() * 512;
+      const x = random(-180, 179);
+      const y = random(-85, 85);
+      data.push([x, y, val]);
+    }
+    return data;
+  }
+
+  function generateColors (count) {
+    const data = [];
+    for (let i = 0; i < count; i++) {
+      data.push(random(0, 1), random(0, 1), random(0, 1));
+    }
+    return data;
+  }
+
+  const earthRadius = 6371008.8;
+
+  const earthCircumfrence = 2 * Math.PI * earthRadius; // meters
+
+  function circumferenceAtLatitude(latitude) {
+    return earthCircumfrence * Math.cos(latitude * Math.PI / 180);
+  }
+
+  function mercatorZfromAltitude(altitude, lat) {
+    return altitude / circumferenceAtLatitude(lat);
+  }
+
+  // [
+  //   [90.55771935117303, 39.90989714727357],
+  //   [102.51084435117338, 24.846755709924764],
+  //   [114.46396935117377, 39.232415634606724]
+  // ]
+  const coordinates = generateData(length * 3);
+  const colors = generateColors(length * 3);
+
+  const PI = Math.PI;
+  const PI_4 = PI / 4;
+  const DEGREES_TO_RADIANS = PI / 180;
+  const TILE_SIZE = 512;
+  const EARTH_CIRCUMFERENCE = 40.03e6;
+
+  class CustomLayer {
+    constructor(options) {
+      this.id = 'custom-layer';
+      this.type = 'custom';
+      this.renderingMode = '2d';
+
+      this.options = { ...options };
+    }
+
+    onAdd(m, gl) {
+      this.map = m;
+
+      this.regl = REGL({
+        gl: gl,
+      });
+
+      this.positions = [];
+
+      coordinates.forEach((coords, i) => {
+        const mc = mapboxgl.MercatorCoordinate.fromLngLat([coords[0], coords[1]], coords[2]);
+        this.positions[i] = [mc.x, mc.y, 0.0, 1.0];
+      });
+
+      this.drawTriangle = this.regl({
+
+        // Shaders in regl are just strings.  You can use glslify or whatever you want
+        // to define them.  No need to manually create shader objects.
+        frag: `precision highp float;
+varying vec3 vColor;
+void main() {
+  gl_FragColor = vec4(vColor, 0.5);
+}
+`,
+
+        vert: `attribute vec4 positions;
+attribute vec3 a_colors;
+
+uniform float u_offset;
+varying vec3 vColor;
+
+void main(void) {
+  gl_Position = positions;
+  vColor = a_colors;
+}`,
+
+        // Here we define the vertex attributes for the above shader
+        attributes: {
+          positions: this.regl.prop('positions'),
+          a_colors: this.regl.buffer(colors),
+        },
+
+        uniforms: {
+        },
+
+        // This tells regl the number of vertices to draw in this command
+        count: length * 3,
+        primitive: 'triangles'
+      });
+    }
+
+    transformVectors(matrix, vectors, worldSize) {
+      let i = 0;
+      const len = vectors.length;
+      const data = new Float32Array(vectors.length * 4);
+      for (; i < len; i++) {
+        const vector = vectors[i].map((v, idx) => {
+          if (idx === 0 || idx === 1) {
+            return v * worldSize;
+          }
+          return v;
+        });
+        const result = vec4.transformMat4([], vector, matrix);
+        // vec4.scale(result, result, 1 / result[3]);
+        data[i * 4] = result[0];
+        data[i * 4 + 1] = result[1];
+        data[i * 4 + 2] = result[2];
+        data[i * 4 + 3] = result[3];
+      }
+      return data;
+    }
+
+    transformVectors2 (matrix, vectors) {
+      const value = [];
+      for (let i = 0; i < vectors.length; i++) {
+        const v = vectors[i];
+        // like vec4.transformMat4
+        value.push(
+          (matrix[0] * v[0]) + (matrix[4] * v[1]) + (matrix[8] * v[2]) + (matrix[12] * v[3]),
+          (matrix[1] * v[0]) + (matrix[5] * v[1]) + (matrix[9] * v[2]) + (matrix[13] * v[3]),
+          (matrix[2] * v[0]) + (matrix[6] * v[1]) + (matrix[10] * v[2]) + (matrix[14] * v[3]),
+          (matrix[3] * v[0]) + (matrix[7] * v[1]) + (matrix[11] * v[2]) + (matrix[15] * v[3]),
+        );
+      }
+      return value;
+    }
+
+    mach() {
+      const { center, worldSize, mercatorMatrix, projMatrix, zoom, zoomScale } = this.map.transform;
+      let matrix = mercatorMatrix.slice();
+      mat4.scale(matrix, matrix, [1 / worldSize, 1 / worldSize, 1 / worldSize]);
+      const m = mat4.scale([], matrix, [1, 1, mercatorZfromAltitude(1, center.lat) * worldSize, 1]);
+      const md = [];
+      for (let i = 0; i < m.length; i++) {
+        md.push(m[i] - projMatrix[i]);
+      }
+      console.log('md', md);
+
+      const w = 0;
+      const scale = worldSize / zoomScale(zoom);
+      const unwrappedX = 0 + Math.pow(2, zoom) * w;
+      const posMatrix = mat4.identity(new Float64Array(16));
+      mat4.translate(posMatrix, posMatrix, [unwrappedX * scale, 0 * scale, 0]);
+      mat4.scale(posMatrix, posMatrix, [scale / EXTENT, scale / EXTENT, 1]);
+      mat4.multiply(posMatrix, projMatrix, posMatrix);
+      // mat4.scale(posMatrix, posMatrix, [1, 1, 1 / mercatorZfromAltitude(1, center.lat) * worldSize, 1]);
+      // mat4.scale(posMatrix, posMatrix, [worldSize, worldSize, worldSize]);
+
+      const md1 = [];
+      for (let i = 0; i < posMatrix.length; i++) {
+        md1.push(posMatrix[i] - projMatrix[i]);
+      }
+      console.log('md1', md1);
+    }
+
+    lngLatToWorld([lng, lat], zoom) {
+      const lambda2 = lng * DEGREES_TO_RADIANS;
+      const phi2 = lat * DEGREES_TO_RADIANS;
+      const x = (TILE_SIZE * (lambda2 + PI)) / (2 * PI);
+      const y = (TILE_SIZE * (PI + Math.log(Math.tan(PI_4 + phi2 * 0.5)))) / (2 * PI);
+      return [x, y, 0, 1];
+    }
+
+    pixelsPerMeter(latitude, zoom) {
+      let scale = Math.pow(2, zoom);
+      let latCosine = Math.cos(latitude * DEGREES_TO_RADIANS);
+
+      return scale * TILE_SIZE / EARTH_CIRCUMFERENCE / latCosine;
+    }
+
+    render(gl, matrix) {
+      this.mach();
+      // console.time('transformVectors2');
+      // this.transformVectors2(matrix, this.positions);
+      // console.timeEnd('transformVectors2');
+      const { pixelMatrix, worldSize } = this.map.transform;
+
+      console.time('render');
+      const worlds = this.getWrappedWorlds(matrix);
+      console.log(worlds);
+      for (let i = 0; i < worlds.length; i++) {
+        const item = worlds[i];
+        // console.time('transformVectors');
+        const positions = this.transformVectors(item.matrix, this.positions, 1);
+        // console.timeEnd('transformVectors');
+        this.drawTriangle({
+          positions: this.regl.buffer(positions),
+        });
+      }
+      this.regl._refresh();
+      console.timeEnd('render');
+    }
+
+    getWrappedWorlds(matrix) {
+      const result = [
+        {
+          world: 0,
+          matrix,
+        }
+      ];
+
+      // const bounds = this.map.getBounds();
+      // const eastIter = Math.max(0, Math.ceil((bounds.getEast() - 180) / 360));
+      // const westIter = Math.max(0, Math.ceil((bounds.getWest() + 180) / -360));
+      // for (let i = 1; i <= eastIter; i++) {
+      //   result.push(i);
+      // }
+      // for (let i = 1; i <= westIter; i++) {
+      //   result.push(-i);
+      // }
+      if (this.options.wrapX) {
+        const { width, height, center, worldSize, zoomScale, zoom, projMatrix } = this.map.transform;
+        const utl = this.map.transform.pointCoordinate(new mapboxgl.Point(0, 0));
+        const utr = this.map.transform.pointCoordinate(new mapboxgl.Point(width, 0));
+        const ubl = this.map.transform.pointCoordinate(new mapboxgl.Point(width, height));
+        const ubr = this.map.transform.pointCoordinate(new mapboxgl.Point(0, height));
+        const w0 = Math.floor(Math.min(utl.x, utr.x, ubl.x, ubr.x));
+        const w1 = Math.floor(Math.max(utl.x, utr.x, ubl.x, ubr.x));
+
+        // Math.pow(2, zoom)
+        const scale = worldSize / zoomScale(zoom);
+
+        const extraWorldCopy = 1;
+
+        // The mercatorMatrix can be used to transform points from mercator coordinates
+        // ([0, 0] nw, [1, 1] se) to GL coordinates.
+        // this.mercatorMatrix = mat4.scale([], m, [this.worldSize, this.worldSize, this.worldSize]);
+        //
+        // scale vertically to meters per pixel (inverse of ground resolution):
+        // mat4.scale(m, m, [1, 1, mercatorZfromAltitude(1, this.center.lat) * this.worldSize, 1]);
+        //
+        // this.projMatrix = m;
+
+        for (let w = w0 - extraWorldCopy; w <= w1 + extraWorldCopy; w++) {
+          if (w === 0) continue;
+          const unwrappedX = w; // canonical.x + Math.pow(2, canonical.z) * unwrappedTileID.wrap
+          const posMatrix = mat4.identity(new Float64Array(16));
+          mat4.translate(posMatrix, posMatrix, [unwrappedX * scale, 0 * scale, 0]);
+          mat4.scale(posMatrix, posMatrix, [scale / EXTENT, scale / EXTENT, 1]);
+          mat4.multiply(posMatrix, projMatrix, posMatrix);
+
+          // mat4.scale(posMatrix, posMatrix, [1, 1, 1 / mercatorZfromAltitude(1, center.lat) * worldSize, 1]);
+
+          result.push({
+            world: w,
+            matrix: posMatrix,
+          });
+        }
+      }
+      return result;
+    }
+
+    onRemove() {
+    }
+  }
+
+  class AppAnimationLoop {
+    start() {
+      const bearing = 0;
+      const pitch = 0;
+      this.map = new mapboxgl.Map({
+        container: 'map',
+        style: 'mapbox://styles/mapbox/dark-v10',
+        // center: [113.5958870877729, 38.27348780477419],
+        center: coordinates[0], // [114.17610137108795, 38.89409734122748],
+        zoom: 2,
+        // zoom: 2,
+        pitch,
+        bearing,
+        maxZoom: 24,
+        antialias: true
+      });
+
+      this.map.on('load', () => {
+        const layer = new CustomLayer({
+          wrapX: false,
+        });
+        this.map.addLayer(layer);
+
+        this.map.addSource('points', {
+          'type': 'geojson',
+          'data': {
+            'type': 'FeatureCollection',
+            'features': coordinates.map(coords => ({
+              'type': 'Feature',
+              'geometry': {
+                'type': 'Point',
+                'coordinates': coords
+              },
+              'properties': {
+              }
+            }))
+          }
+        });
+
+        this.map.addLayer({
+          'id': 'points',
+          'type': 'circle',
+          'source': 'points',
+          'paint': {
+            'circle-radius': 2,
+            'circle-color': '#ff2200'
+          }
+        });
+      });
+
+      window.map = this.map;
+    }
+
+    delete() {
+      this.map.remove();
+    }
+  }
+
+  new AppAnimationLoop().start();
+</script>
+
+</body>
+</html>
+
