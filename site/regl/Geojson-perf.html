@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8" />
+  <title>Geojson-perf</title>
+  <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <link href="https://cdn.jsdelivr.net/npm/@sakitam-gis/mapbox-gl@1.20.0/dist/mapbox-gl.css" rel="stylesheet" />
+  <style>
+    body { margin: 0; padding: 0; }
+    #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+  </style>
+</head>
+<body>
+<div id="map"></div>
+<script src="https://cdn.jsdelivr.net/npm/@sakitam-gis/mapbox-gl@1.20.0/dist/mapbox-gl-dev.js"></script>
+
+<script type="module">
+  import REGL from 'https://cdn.skypack.dev/regl';
+  import earcut from 'https://cdn.skypack.dev/earcut';
+  // import quickselect from 'https://cdn.skypack.dev/quickselect';
+  import rewind from 'https://cdn.skypack.dev/@mapbox/geojson-rewind';
+  import * as mercatorProj from 'https://cdn.skypack.dev/mercator-proj';
+  mapboxgl.accessToken = "pk.eyJ1Ijoic21pbGVmZGQiLCJhIjoiY2tnN2Iybm91MDIzajJ5bHM1N3o5YzgybiJ9.KI0dCXX1rAfcLO1iwGKwHg"; // eslint-disable-line
+
+  function generateColors (count) {
+    const data = [];
+    for (let i = 0; i < count; i++) {
+      data.push(random(0, 1), random(0, 1), random(0, 1));
+    }
+    return data;
+  }
+
+  const coordinates = [
+    [90.55771935117303, 39.90989714727357],
+    [102.51084435117338, 24.846755709924764],
+    [114.46396935117377, 39.232415634606724]
+  ] || generateData(length * 3);
+  const colors = generateColors(length * 3);
+
+  /**
+   * 将多面转换为单面
+   * @returns {*}
+   */
+  function flattenForPolygons (features) {
+    if (!features || features.length === 0) return [];
+
+    const len = features.length;
+    let i = 0;
+    const data = [];
+
+    for (; i < len; i++) {
+      const feature = features[i];
+
+      const coordinates = feature.geometry.coordinates;
+      const type = feature.geometry.type;
+
+      if (type === 'Polygon') {
+        data.push(feature);
+      } else if (type === 'MultiPolygon') {
+        for (let k = 0; k < coordinates.length; k++) {
+          const coordinate = coordinates[k];
+          data.push({
+            ...feature,
+            geometry: {
+              type: 'Polygon',
+              coordinates: coordinate
+            },
+          });
+        }
+      }
+    }
+
+    return data;
+  }
+
+  class CustomLayer {
+    constructor(options) {
+      this.id = 'custom-layer';
+      this.type = 'custom';
+      this.renderingMode = '2d';
+
+      this.options = { ...options };
+
+      this.renderData = [];
+    }
+
+    setData() {
+      const { data } = this.options;
+      // @link https://github.com/mapbox/geojson-rewind
+      rewind(data, true);
+      const features = data.features;
+      const len = features.length;
+      let i = 0;
+      this.renderData = [];
+      console.time('renderData');
+      for (; i < len; i++) {
+        const feature = features[i];
+
+        const coordinates = feature.geometry.coordinates;
+        const type = feature.geometry.type;
+
+        if (type === 'Polygon') {
+          const polygon = earcut.flatten(feature.geometry.coordinates);
+
+          let positions = new Float32Array(polygon.vertices);
+          let indexData = new Uint16Array(earcut(polygon.vertices, polygon.holes, polygon.dimensions));
+
+          const precisionData = mercatorProj.highPrecisionLngLat(positions);
+
+          this.renderData.push({
+            positions: {
+              buffer: this.regl.buffer({
+                data: positions,
+                type: 'float',
+              }),
+              size: 2,
+            },
+            precisionData: {
+              buffer: this.regl.buffer({
+                data: precisionData,
+                type: 'float',
+              }),
+              size: 2,
+            },
+            colors: feature.properties.color || generateColors(1),
+            elements: this.regl.elements({
+              data: indexData,
+              primitive: 'triangles',
+              // primitive: 'line strip',
+              type: 'uint16',
+              count: indexData.length,
+            }),
+          });
+        } else if (type === 'MultiPolygon') {
+          for (let k = 0; k < coordinates.length; k++) {
+            const coordinate = coordinates[k];
+            const polygon = earcut.flatten(coordinate);
+
+            let positions = new Float32Array(polygon.vertices);
+            let indexData = new Uint16Array(earcut(polygon.vertices, polygon.holes, polygon.dimensions));
+
+            const precisionData = mercatorProj.highPrecisionLngLat(positions);
+
+            this.renderData.push({
+              positions: {
+                buffer: this.regl.buffer({
+                  data: positions,
+                  type: 'float',
+                }),
+                size: 2,
+              },
+              precisionData: {
+                buffer: this.regl.buffer({
+                  data: precisionData,
+                  type: 'float',
+                }),
+                size: 2,
+              },
+              colors: feature.properties.color || generateColors(1),
+              elements: this.regl.elements({
+                data: indexData,
+                primitive: 'triangles',
+                // primitive: 'line strip',
+                type: 'uint16',
+                count: indexData.length,
+              }),
+            });
+          }
+        }
+      }
+      console.timeEnd('renderData');
+    }
+
+    onAdd(m, gl) {
+      this.map = m;
+
+      this.regl = REGL({
+        gl: gl,
+      });
+
+      const uniforms = {
+        u_colors: (_, { colors }) => colors,
+      };
+
+      const keys = mercatorProj.getUniformKeys();
+      keys.forEach(key => {
+        uniforms[key] = this.regl.prop(key);
+      });
+
+      this.drawGeoJSON = this.regl({
+
+        // Shaders in regl are just strings.  You can use glslify or whatever you want
+        // to define them.  No need to manually create shader objects.
+        frag: `precision highp float;
+uniform vec4 u_colors;
+void main() {
+  gl_FragColor = u_colors;
+}
+`,
+
+        vert: mercatorProj.injectMercatorGLSL(gl, `attribute vec2 positions;
+attribute vec2 precisionBits;
+
+void main(void) {
+  gl_Position = project_position_to_clipspace(vec3(positions, 0.0), vec3(precisionBits, 0.0), vec3(0.0));
+}
+`),
+
+        // Here we define the vertex attributes for the above shader
+        attributes: {
+          // regl.buffer creates a new array buffer object
+          positions: (_, { positions }) => positions,
+          precisionBits: (_, { precisionData }) => precisionData,
+        },
+
+        uniforms: uniforms,
+
+        colorMask: [true, true, true, true],
+
+        elements: (_, { elements }) => elements,
+      });
+
+      this.setData();
+    }
+
+    render(gl, matrix) {
+      const center = this.map.getCenter();
+      const centerArray = center.toArray();
+      const zoom = this.map.getZoom();
+      const { width, height } = this.map.transform;
+
+      this.viewport = new mercatorProj.WebMercatorViewport({
+        width: width,
+        height: height,
+        longitude: center && centerArray[0],
+        latitude: center && centerArray[1],
+        zoom,
+        pitch: this.map.getPitch(),
+        bearing: this.map.getBearing(),
+        repeat: true
+      });
+
+      const subViewports = this.viewport.subViewports;
+
+      for (let i = 0; i < subViewports.length; i++) {
+        const viewport = subViewports[i];
+        window.uniforms = mercatorProj.getUniforms({
+          viewport: viewport,
+        });
+        window.viewport = this.viewport;
+
+        let j = 0;
+        const len = this.renderData.length
+        for (; j < len; j++) {
+          const item = this.renderData[j];
+          this.drawGeoJSON({
+            ...uniforms,
+            ...item,
+          });
+        }
+      }
+    }
+
+    onRemove() {
+    }
+  }
+
+  class AppAnimationLoop {
+    start() {
+      const bearing = 0;
+      const pitch = 0;
+      this.map = new mapboxgl.Map({
+        container: 'map',
+        style: 'mapbox://styles/mapbox/dark-v10',
+        center: [113.5958870877729, 38.27348780477419],
+        zoom: 2,
+        // zoom: 2,
+        pitch,
+        bearing,
+        maxZoom: 24,
+        antialias: true
+      });
+
+      this.map.on('load', () => {
+        // fetch('https://openlayers.org/en/latest/examples/data/geojson/countries.geojson')
+        fetch('https://sakitam-1255686840.cos.ap-beijing.myqcloud.com/public/codepen/json/weather.json')
+          .then(res => res.json())
+          .then(res => res.data.features)
+          .then(({ features: res }) => {
+            const features = {
+              type: 'FeatureCollection',
+              features: [],
+            };
+            for (let i = 0, len = res.length; i < len; i++) {
+              const item = res[i] || {};
+              features.features.push({
+                type: 'Feature',
+                properties: {
+                  // color: [Math.random(), Math.random(), Math.random(), 1],
+                  color: item.properties.color.map(c => c / 255),
+                },
+                geometry: {
+                  type: item.geometry.type,
+                  coordinates: item.geometry.coordinates,
+                },
+              });
+            }
+            const layer = new CustomLayer({
+              data: features,
+            });
+            this.map.addLayer(layer);
+          })
+      });
+
+      window.map = this.map;
+    }
+
+    delete() {
+      this.map.remove();
+    }
+  }
+
+  new AppAnimationLoop().start();
+</script>
+</body>
+</html>
+
