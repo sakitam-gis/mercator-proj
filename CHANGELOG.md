@@ -1,3 +1,10 @@
+## [1.0.1](https://github.com/sakitam-gis/mercator-proj/compare/v1.0.0...v1.0.1) (2025-10-10)
+
+
+### Bug Fixes
+
+* **patch:** 修复 release 报错 ([b157fea](https://github.com/sakitam-gis/mercator-proj/commit/b157fea7f295da41f2aa332dfa98e20d5c63fdd2))
+
 # 1.0.0 (2025-10-10)
 
 
