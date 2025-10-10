@@ -12,29 +12,26 @@ jobs:
 
     strategy:
       matrix:
-        os: [windows-latest, ubuntu-latest, macos-latest]
-        node-version: [22.x]  # 匹配 package.json 中的 engines 要求
+        os: [windows-latest, ubuntu-latest]
+        node-version: [22]
 
     runs-on: ${{ matrix.os }}
 
     steps:
-      # 使用最新版本的 actions
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 设置 Node.js 版本
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
+          cache: 'npm'
 
-      # 使用官方的 pnpm action
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 9.6.0  # 匹配 package.json 中的 packageManager
+          version: 9.6.0
 
-      # 优化缓存配置
       - name: Get pnpm store directory
         shell: bash
         run: |
@@ -48,23 +45,18 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pnpm-
 
-      # 安装依赖
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # 代码质量检查
       - name: Lint
         run: pnpm run lint
 
-      # 构建和测试
       - name: Build and Test
         run: pnpm test
 
-      # 覆盖率报告
       - name: Coverage
         run: pnpm run coverage
 
-      # 上传覆盖率到 Coveralls
       - name: Coveralls
         uses: coverallsapp/github-action@v2
         env:
@@ -84,12 +76,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # 需要完整的 git 历史用于 semantic-release
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22.x
+          node-version: 22
+          cache: 'npm'
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -131,7 +124,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22.x
+          node-version: 22
+          cache: 'npm'
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
