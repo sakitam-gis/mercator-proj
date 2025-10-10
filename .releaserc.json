@@ -32,7 +32,15 @@
       }
     ],
     "@semantic-release/npm",
-    "@semantic-release/github",
+    [
+      "@semantic-release/github",
+      {
+        "successComment": "🎉 This pull request is included in version ${nextRelease.version} :tada:",
+        "failTitle": "The automated release is failing 🚨",
+        "failComment": "The automated release is failing 🚨",
+        "releasedLabels": ["released on ${nextRelease.gitTag}"]
+      }
+    ],
     [
       "@semantic-release/git",
       {

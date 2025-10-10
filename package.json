@@ -23,7 +23,7 @@
     "test": "pnpm run build && pnpm run test-only",
     "test-only": "vitest run",
     "coverage": "vitest run --coverage",
-    "semantic-release": "semantic-release --branches master"
+    "semantic-release": "semantic-release"
   },
   "keywords": [
     "glsl",
