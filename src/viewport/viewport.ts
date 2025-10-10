@@ -1,11 +1,7 @@
-// @ts-ignore
-import * as mat4 from 'gl-matrix/mat4';
-// @ts-ignore
-import { transformMat4 } from 'gl-matrix/vec3';
-// @ts-ignore
-import * as vec2 from 'gl-matrix/vec2';
+import { mat4, vec3, vec2 } from 'gl-matrix';
 import { equals } from './common';
-import { createMat4, getCameraPosition, getFrustumPlanes, FrustumPlanesInterface } from './math-utils';
+import type { FrustumPlanesInterface } from './math-utils';
+import { createMat4, getCameraPosition, getFrustumPlanes } from './math-utils';
 
 import {
   getBounds,
@@ -17,7 +13,7 @@ import {
   lngLatToWorld,
   pixelsToWorld,
   worldToLngLat,
-  worldToPixels
+  worldToPixels,
 } from './web-mercator-utils';
 
 
@@ -28,11 +24,11 @@ export enum PROJECTION_MODE {
   // This is automatically assigned by the project module
   WEB_MERCATOR_AUTO_OFFSET = 4,
 
-  IDENTITY = 0
+  IDENTITY = 0,
 }
 
 export enum COORDINATE_SYSTEM {
-// `LNGLAT` if rendering into a geospatial viewport, `CARTESIAN` otherwise
+  // `LNGLAT` if rendering into a geospatial viewport, `CARTESIAN` otherwise
   DEFAULT = -1,
   // Positions are interpreted as [lng, lat, elevation]
   // lng lat are degrees, elevation is meters. distances as meters.
@@ -47,12 +43,12 @@ export enum COORDINATE_SYSTEM {
   LNGLAT_OFFSETS = 3,
 
   // Non-geospatial
-  CARTESIAN = 0
+  CARTESIAN = 0,
 }
 
 const DEGREES_TO_RADIANS = Math.PI / 180;
 
-const IDENTITY = createMat4();
+const IDENTITY = createMat4() as number[];
 
 const ZERO_VECTOR = [0, 0, 0];
 
@@ -60,7 +56,7 @@ const DEFAULT_ZOOM = 0;
 
 const DEFAULT_DISTANCE_SCALES = {
   unitsPerMeter: [1, 1, 1],
-  metersPerUnit: [1, 1, 1]
+  metersPerUnit: [1, 1, 1],
 };
 
 export interface IDistanceScales {
@@ -146,6 +142,7 @@ export default class WebMercatorViewport {
   private x: number;
   private y: number;
   private _frustumPlanes: FrustumPlanesInterface;
+  // @ts-ignore ignore type error
   private orthographic: boolean;
 
   /**
@@ -173,7 +170,7 @@ export default class WebMercatorViewport {
       projectOffsetZoom = 12,
     } = opts;
 
-    let {width, height, altitude = 1.5} = opts;
+    let { width, height, altitude = 1.5 } = opts;
     const scale = Math.pow(2, zoom);
 
     // Silently allow apps to send in 0,0 to facilitate isomorphic render etc
@@ -184,13 +181,13 @@ export default class WebMercatorViewport {
     // TODO - just throw an Error instead?
     altitude = Math.max(0.75, altitude);
 
-    const {fov, aspect, focalDistance, near, far} = getProjectionParameters({
+    const { fov, aspect, focalDistance, near, far } = getProjectionParameters({
       width,
       height,
       pitch,
       altitude,
       nearZMultiplier,
-      farZMultiplier
+      farZMultiplier,
     });
 
     // The uncentered matrix allows us two move the center addition to the
@@ -204,13 +201,13 @@ export default class WebMercatorViewport {
       scale,
       altitude,
       // @ts-ignore center typedef is incorrect
-      center: null
+      center: null,
     });
 
     if (worldOffset) {
       const m = createMat4();
       const viewOffset = mat4.translate(m, m, [512 * worldOffset, 0, 0]);
-      viewMatrixUncentered = mat4.multiply(viewOffset, viewMatrixUncentered, viewOffset);
+      viewMatrixUncentered = mat4.multiply(viewOffset, viewMatrixUncentered, viewOffset) as number[];
     }
 
     this.id = id || 'viewport';
@@ -234,7 +231,7 @@ export default class WebMercatorViewport {
       // TODO WebMercatorViewport is already carefully set up to "focus" on ground, so can't use focal distance
       focalDistance: orthographic ? focalDistance : 1,
       near,
-      far
+      far,
     };
 
     // Save parameters
@@ -322,10 +319,11 @@ export default class WebMercatorViewport {
   project(
     xyz: number[],
     {
-      topLeft = true
+      topLeft = true,
     }: {
       topLeft?: boolean;
-    } = {}): number[] {
+    } = {},
+  ): number[] {
     const worldPosition = this.projectPosition(xyz);
     const coord = worldToPixels(worldPosition, this.pixelProjectionMatrix);
 
@@ -348,17 +346,18 @@ export default class WebMercatorViewport {
     xyz: number[],
     {
       topLeft = true,
-      targetZ
+      targetZ,
     }: {
       topLeft?: boolean;
-      targetZ?: number
-    } = {}): (number | undefined)[] {
+      targetZ?: number;
+    } = {},
+  ): (number | undefined)[] {
     const [x, y, z] = xyz;
 
     const y2 = topLeft ? y : this.height - y;
     const targetZWorld = targetZ && targetZ * this.distanceScales.unitsPerMeter[2];
     const coord = pixelsToWorld([x, y2, z], this.pixelUnprojectionMatrix, targetZWorld);
-    const [X, Y, Z] = this.unprojectPosition(coord);
+    const [X, Y, Z] = this.unprojectPosition(coord as number[]) as number[];
 
     if (Number.isFinite(z)) {
       return [X, Y, Z];
@@ -416,7 +415,7 @@ export default class WebMercatorViewport {
       return getDistanceScales({
         longitude: coordinateOrigin[0] as number,
         latitude: coordinateOrigin[1] as number,
-        highPrecision: true
+        highPrecision: true,
       });
     }
     return this.distanceScales;
@@ -429,18 +428,8 @@ export default class WebMercatorViewport {
    * @param width
    * @param height
    */
-  containsPixel({x, y, width = 1, height = 1}: {
-    x: number;
-    y: number;
-    width?: number;
-    height?: number;
-  }) {
-    return (
-      x < this.x + this.width &&
-      this.x < x + width &&
-      y < this.y + this.height &&
-      this.y < y + height
-    );
+  containsPixel({ x, y, width = 1, height = 1 }: { x: number; y: number; width?: number; height?: number }) {
+    return x < this.x + this.width && this.x < x + width && y < this.y + this.height && this.y < y + height;
   }
 
   /**
@@ -468,7 +457,7 @@ export default class WebMercatorViewport {
     aspect,
     focalDistance,
     near,
-    far
+    far,
   }: {
     fovyRadians: number;
     aspect: number;
@@ -486,9 +475,9 @@ export default class WebMercatorViewport {
       const top = focalDistance * Math.tan(halfY); // focus_plane is the distance from the camera
       const right = top * aspect;
 
-      mat4.ortho(m, -right, right, -top, top, near, far);
+      mat4.ortho(m, -right, right, -top, top, near!, far!);
     } else {
-      mat4.perspective(m, fovyRadians, aspect, near, far);
+      mat4.perspective(m, fovyRadians, aspect, near!, far!);
     }
     return m;
   }
@@ -506,7 +495,7 @@ export default class WebMercatorViewport {
       modelMatrix = null, // A model matrix to be applied to position, to match the layer props API
       focalDistance = 1, // Only needed for orthographic views
 
-      distanceScales
+      distanceScales,
     } = opts;
 
     // Check if we have a geospatial anchor
@@ -533,14 +522,14 @@ export default class WebMercatorViewport {
       // Apply model matrix if supplied
       this.position = position;
       this.modelMatrix = modelMatrix;
-      this.meterOffset = modelMatrix ? transformMat4([-0, -0, -0], position, modelMatrix) : position;
+      this.meterOffset = modelMatrix ? (vec3.transformMat4([-0, -0, -0], position, modelMatrix) as number[]) : position;
     }
 
     if (this.isGeospatial) {
       // Determine camera center
       this.longitude = longitude;
       this.latitude = latitude;
-      this.center = this._getCenterInWorld({longitude, latitude});
+      this.center = this._getCenterInWorld({ longitude, latitude });
     } else {
       this.center = position ? this.projectPosition(position) : [0, 0, 0];
     }
@@ -548,7 +537,11 @@ export default class WebMercatorViewport {
     // Make a centered version of the matrix for projection modes without an offset
     this.viewMatrix = createMat4();
     mat4.multiply(this.viewMatrix, this.viewMatrixUncentered, this.viewMatrix);
-    mat4.translate(this.viewMatrix, this.viewMatrix, (this.center || ZERO_VECTOR).map(i => -i));
+    mat4.translate(
+      this.viewMatrix,
+      this.viewMatrix,
+      (this.center || ZERO_VECTOR).map((i) => -i),
+    );
   }
 
   _initProjectionMatrix(opts: IViewportOpts) {
@@ -562,7 +555,7 @@ export default class WebMercatorViewport {
       fovy = 75,
       near = 0.1, // Distance of near clipping plane
       far = 1000, // Distance of far clipping plane
-      focalDistance = 1
+      focalDistance = 1,
     } = opts;
 
     this.projectionMatrix =
@@ -573,7 +566,7 @@ export default class WebMercatorViewport {
         aspect: this.width / this.height,
         focalDistance,
         near,
-        far
+        far,
       });
   }
 
@@ -588,7 +581,7 @@ export default class WebMercatorViewport {
     // console.log('VPM', this.viewMatrix, this.projectionMatrix, this.viewProjectionMatrix);
 
     // Calculate inverse view matrix
-    this.viewMatrixInverse = mat4.invert([], this.viewMatrix) || this.viewMatrix;
+    this.viewMatrixInverse = (mat4.invert([], this.viewMatrix) || this.viewMatrix) as number[];
 
     // Decompose camera parameters
     this.cameraPosition = getCameraPosition(this.viewMatrixInverse);
@@ -614,17 +607,14 @@ export default class WebMercatorViewport {
 
     const m = createMat4();
 
-    this.pixelUnprojectionMatrix = mat4.invert(m, this.pixelProjectionMatrix);
+    this.pixelUnprojectionMatrix = mat4.invert(m, this.pixelProjectionMatrix) as number[];
     if (!this.pixelUnprojectionMatrix) {
       console.warn('Pixel project matrix not invertible');
     }
   }
 
-  _getCenterInWorld({longitude, latitude}: {
-    longitude:number;
-    latitude: number;
-  }) {
-    const {meterOffset, distanceScales} = this;
+  _getCenterInWorld({ longitude, latitude }: { longitude: number; latitude: number }) {
+    const { meterOffset, distanceScales } = this;
 
     // Make a centered version of the matrix for projection modes without an offset
     const center = this.projectPosition([longitude, latitude, 0]);
@@ -653,10 +643,8 @@ export default class WebMercatorViewport {
       const maxOffset = Math.ceil((bounds[2] - 180) / 360);
 
       for (let x = minOffset; x <= maxOffset; x++) {
-        const offsetViewport = x
-          // @ts-ignore
-          ? new WebMercatorViewport({ ...this, worldOffset: x })
-          : this;
+        // @ts-ignore ignore type error
+        const offsetViewport = x ? new WebMercatorViewport({ ...this, worldOffset: x }) : this;
         this._subViewports.push(offsetViewport);
       }
     }
@@ -687,17 +675,14 @@ export default class WebMercatorViewport {
    *   Specifies a point on the screen.
    * @return {Array} [lng,lat] new map center.
    */
-  getMapCenterByLngLatPosition({lngLat, pos}: {
-    lngLat: number[];
-    pos: number[];
-  }): number[] {
+  getMapCenterByLngLatPosition({ lngLat, pos }: { lngLat: number[]; pos: number[] }): number[] {
     const fromLocation = pixelsToWorld(pos, this.pixelUnprojectionMatrix);
     const toLocation = this.projectFlat(lngLat);
 
     const translate = vec2.add([], toLocation, vec2.negate([], fromLocation));
     const newCenter = vec2.add([], this.center, translate);
 
-    return this.unprojectFlat(newCenter);
+    return this.unprojectFlat(newCenter as number[]);
   }
 
   getBounds(options = {}) {
@@ -708,7 +693,7 @@ export default class WebMercatorViewport {
       Math.min(corners[0][0], corners[1][0], corners[2][0], corners[3][0]),
       Math.min(corners[0][1], corners[1][1], corners[2][1], corners[3][1]),
       Math.max(corners[0][0], corners[1][0], corners[2][0], corners[3][0]),
-      Math.max(corners[0][1], corners[1][1], corners[2][1], corners[3][1])
+      Math.max(corners[0][1], corners[1][1], corners[2][1], corners[3][1]),
     ];
   }
 }

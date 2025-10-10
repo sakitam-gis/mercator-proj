@@ -1,42 +1,31 @@
 {
+  "$schema": "https://json.schemastore.org/tsconfig",
   "compilerOptions": {
-    "baseUrl": ".",
-    "rootDir": ".",
-    "moduleResolution": "node",
-    "paths": {
-      "*": [
-        "node_modules",
-        "typings/*",
-        "types/*"
-      ]
-    },
-    "target": "esnext",
-    "module": "esnext",
-    "lib": ["es2015", "es2016", "es2017", "dom"],
-    "types": ["node", "reflect-metadata", "jest"],
-    "esModuleInterop": true,
-    "strictPropertyInitialization": false,
-    "strict": true,
-    "preserveSymlinks": true,
+    "strict": false,
     "allowJs": true,
-    "allowSyntheticDefaultImports": true,
-    "experimentalDecorators": true,
-    "emitDecoratorMetadata": false,
-    "resolveJsonModule": true,
-    "emitDeclarationOnly": false,
     "sourceMap": true,
+    "esModuleInterop": true,
     "declaration": true,
-    "declarationDir": "dist/types"
+    "declarationMap": true,
+    "experimentalDecorators": true,
+    "strictNullChecks": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "noUnusedLocals": true,
+    "isolatedModules": true,
+    "removeComments": false,
+    "moduleResolution": "node",
+    "module": "esnext",
+    "target": "esnext",
+    "jsx": "preserve",
+    "types": ["node", "vitest"],
+    "useDefineForClassFields": false,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "outDir": "dist",
+    "rootDir": ".",
+    "lib": ["esnext", "dom", "webworker"]
   },
-  "include": [
-    "src",
-    "typings.d.ts"
-  ],
-  "exclude": [
-    "**/*.glsl",
-    "dist",
-    "**/__tests__/**/*",
-    "**/*.spec.*",
-    "node_modules"
-  ]
+  "include": ["src/**/*.ts", "src/**/*.json", "package.json", "rollup.config.ts", "typings.d.ts"],
+  "exclude": ["**/node_modules/**", "**/dist/**"]
 }

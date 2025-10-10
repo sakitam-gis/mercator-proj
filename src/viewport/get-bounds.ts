@@ -1,5 +1,4 @@
-// @ts-ignore
-import * as vec2 from 'gl-matrix/vec2';
+import { vec2 } from 'gl-matrix';
 import { worldToLngLat } from './web-mercator-utils';
 import { transformVector } from './math-utils';
 
@@ -11,8 +10,8 @@ const DEGREES_TO_RADIANS = Math.PI / 180;
  * @param {Number} z - elevation in meters
  */
 export default function getBounds(viewport: any, z = 0) {
-  const {width, height, unproject} = viewport;
-  const unprojectOps = {targetZ: z};
+  const { width, height, unproject } = viewport;
+  const unprojectOps = { targetZ: z };
   const bottomLeft = unproject([0, height], unprojectOps);
   const bottomRight = unproject([width, height], unprojectOps);
   let topLeft;
@@ -41,13 +40,13 @@ export default function getBounds(viewport: any, z = 0) {
  * @param {Number} targetZ - the elevation of the point in meters
  */
 function unprojectOnFarPlane(viewport: any, x: number, targetZ: number) {
-  const {pixelUnprojectionMatrix} = viewport;
+  const { pixelUnprojectionMatrix } = viewport;
   const coord0 = transformVector(pixelUnprojectionMatrix, [x, 0, 1, 1]);
   const coord1 = transformVector(pixelUnprojectionMatrix, [x, viewport.height, 1, 1]);
 
   const z = targetZ * viewport.distanceScales.unitsPerMeter[2];
   const t = (z - coord0[2]) / (coord1[2] - coord0[2]);
-  const coord = vec2.lerp([], coord0, coord1, t);
+  const coord = vec2.lerp([], coord0, coord1, t) as number[];
 
   const result = worldToLngLat(coord);
   result[2] = targetZ;

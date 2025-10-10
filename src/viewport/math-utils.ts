@@ -1,5 +1,4 @@
-// @ts-ignore
-import * as vec4 from 'gl-matrix/vec4';
+import { vec4 } from 'gl-matrix';
 
 export interface FrustumPlane {
   distance: number;
@@ -21,7 +20,7 @@ function getFrustumPlane(a: number, b: number, c: number, d: number): FrustumPla
   const L = Math.sqrt(lengthSquared(scratchVector));
   return {
     distance: d / L,
-    normal: [-a / L, -b / L, -c / L]
+    normal: [-a / L, -b / L, -c / L],
   };
 }
 
@@ -51,44 +50,43 @@ export interface FrustumPlanesInterface {
 
 // https://www.gamedevs.org/uploads/fast-extraction-viewing-frustum-planes-from-world-view-projection-matrix.pdf
 export function getFrustumPlanes(viewProjectionMatrix: number[] | Float32Array | Float64Array) {
-  // @ts-ignore
-  const planes: FrustumPlanesInterface = {};
+  const planes: FrustumPlanesInterface = {} as FrustumPlanesInterface;
 
   planes.left = getFrustumPlane(
     viewProjectionMatrix[3] + viewProjectionMatrix[0],
     viewProjectionMatrix[7] + viewProjectionMatrix[4],
     viewProjectionMatrix[11] + viewProjectionMatrix[8],
-    viewProjectionMatrix[15] + viewProjectionMatrix[12]
+    viewProjectionMatrix[15] + viewProjectionMatrix[12],
   );
   planes.right = getFrustumPlane(
     viewProjectionMatrix[3] - viewProjectionMatrix[0],
     viewProjectionMatrix[7] - viewProjectionMatrix[4],
     viewProjectionMatrix[11] - viewProjectionMatrix[8],
-    viewProjectionMatrix[15] - viewProjectionMatrix[12]
+    viewProjectionMatrix[15] - viewProjectionMatrix[12],
   );
   planes.bottom = getFrustumPlane(
     viewProjectionMatrix[3] + viewProjectionMatrix[1],
     viewProjectionMatrix[7] + viewProjectionMatrix[5],
     viewProjectionMatrix[11] + viewProjectionMatrix[9],
-    viewProjectionMatrix[15] + viewProjectionMatrix[13]
+    viewProjectionMatrix[15] + viewProjectionMatrix[13],
   );
   planes.top = getFrustumPlane(
     viewProjectionMatrix[3] - viewProjectionMatrix[1],
     viewProjectionMatrix[7] - viewProjectionMatrix[5],
     viewProjectionMatrix[11] - viewProjectionMatrix[9],
-    viewProjectionMatrix[15] - viewProjectionMatrix[13]
+    viewProjectionMatrix[15] - viewProjectionMatrix[13],
   );
   planes.near = getFrustumPlane(
     viewProjectionMatrix[3] + viewProjectionMatrix[2],
     viewProjectionMatrix[7] + viewProjectionMatrix[6],
     viewProjectionMatrix[11] + viewProjectionMatrix[10],
-    viewProjectionMatrix[15] + viewProjectionMatrix[14]
+    viewProjectionMatrix[15] + viewProjectionMatrix[14],
   );
   planes.far = getFrustumPlane(
     viewProjectionMatrix[3] - viewProjectionMatrix[2],
     viewProjectionMatrix[7] - viewProjectionMatrix[6],
     viewProjectionMatrix[11] - viewProjectionMatrix[10],
-    viewProjectionMatrix[15] - viewProjectionMatrix[14]
+    viewProjectionMatrix[15] - viewProjectionMatrix[14],
   );
 
   return planes;

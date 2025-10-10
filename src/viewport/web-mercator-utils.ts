@@ -1,12 +1,7 @@
-// @ts-ignore
-import * as vec2 from 'gl-matrix/vec2';
-// @ts-ignore
-import * as vec3 from 'gl-matrix/vec3';
-// @ts-ignore
-import * as mat4 from 'gl-matrix/mat4';
+import { vec2, vec3, mat4 } from 'gl-matrix';
 import assert from './assert';
 import { createMat4, transformVector } from './math-utils';
-import { IDistanceScales } from './viewport';
+import type { IDistanceScales } from './viewport';
 
 // CONSTANTS
 const PI = Math.PI;
@@ -59,9 +54,7 @@ export function worldToLngLat([x, y]: number[]) {
 
 // Returns the zoom level that gives a 1 meter pixel at a certain latitude
 // 1 = C*cos(y)/2^z/TILE_SIZE = C*cos(y)/2^(z+9)
-export function getMeterZoom({latitude}: {
-  latitude: number;
-}) {
+export function getMeterZoom({ latitude }: { latitude: number }) {
   assert(Number.isFinite(latitude));
   const latCosine = Math.cos(latitude * DEGREES_TO_RADIANS);
   return scaleToZoom(EARTH_CIRCUMFERENCE * latCosine) - 9;
@@ -74,7 +67,11 @@ export function getMeterZoom({latitude}: {
  * with latitude.
  */
 
-export function getDistanceScales({latitude, longitude, highPrecision = false}: {
+export function getDistanceScales({
+  latitude,
+  longitude,
+  highPrecision = false,
+}: {
   latitude: number;
   longitude: number;
   highPrecision?: boolean;
@@ -140,10 +137,10 @@ export function addMetersToLngLat(lngLatZ: number[], xyz: number[]) {
   const [longitude, latitude, z0] = lngLatZ;
   const [x, y, z] = xyz;
 
-  const {unitsPerMeter, unitsPerMeter2} = getDistanceScales({
+  const { unitsPerMeter, unitsPerMeter2 } = getDistanceScales({
     longitude,
     latitude,
-    highPrecision: true
+    highPrecision: true,
   });
 
   const worldspace = lngLatToWorld(lngLatZ);
@@ -154,7 +151,6 @@ export function addMetersToLngLat(lngLatZ: number[], xyz: number[]) {
     worldspace[1] += y * (unitsPerMeter[1] + unitsPerMeter2[1] * y);
   }
 
-  // @ts-ignore
   const newLngLat = worldToLngLat(worldspace);
   const newZ = (z0 || 0) + (z || 0);
 
@@ -174,7 +170,7 @@ export function getViewMatrix({
   altitude,
   // Pre-calculated parameters
   scale,
-  center
+  center,
 }: {
   height: number;
   pitch: number;
@@ -215,7 +211,7 @@ export function getProjectionParameters({
   altitude = DEFAULT_ALTITUDE,
   pitch = 0,
   nearZMultiplier = 1,
-  farZMultiplier = 1
+  farZMultiplier = 1,
 }: {
   width: number;
   height: number;
@@ -240,7 +236,7 @@ export function getProjectionParameters({
     aspect: width / height,
     focalDistance: altitude,
     near: nearZMultiplier,
-    far: farZ * farZMultiplier
+    far: farZ * farZMultiplier,
   };
 }
 
@@ -254,7 +250,7 @@ export function getProjectionMatrix({
   pitch,
   altitude,
   nearZMultiplier,
-  farZMultiplier
+  farZMultiplier,
 }: {
   width: number;
   height: number;
@@ -263,13 +259,13 @@ export function getProjectionMatrix({
   nearZMultiplier: number;
   farZMultiplier: number;
 }) {
-  const {fov, aspect, near, far} = getProjectionParameters({
+  const { fov, aspect, near, far } = getProjectionParameters({
     width,
     height,
     altitude,
     pitch,
     nearZMultiplier,
-    farZMultiplier
+    farZMultiplier,
   });
 
   const projectionMatrix = mat4.perspective(
@@ -277,7 +273,7 @@ export function getProjectionMatrix({
     fov, // fov in radians
     aspect, // aspect ratio
     near, // near plane
-    far // far plane
+    far, // far plane
   );
 
   return projectionMatrix;
@@ -311,7 +307,7 @@ export function pixelsToWorld(xyz: number[], pixelUnprojectionMatrix: number[], 
   const z1 = coord1[2];
 
   const t = z0 === z1 ? 0 : ((targetZ || 0) - z0) / (z1 - z0);
-  return vec2.lerp([], coord0, coord1, t);
+  return vec2.lerp([], coord0, coord1, t) as number[];
 }
 
 export { default as getBounds } from './get-bounds';

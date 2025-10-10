@@ -1,4 +1,22 @@
 *.html
+
+node_modules
+
+# build
 coverage
-dist/
-node_modules/
+dist
+
+# other
+.eslintrc.js
+.prettierrc.js
+vitest.config.ts
+
+# lib
+
+playground/lib
+
+# css
+**/*.less
+
+# vitepress
+/docs/.vitepress/cache/

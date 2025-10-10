@@ -16,6 +16,7 @@ uniform mat4 project_uViewProjectionMatrix;
 uniform vec3 project_uCommonUnitsPerMeter;
 uniform vec3 project_uCommonUnitsPerWorldUnit;
 uniform vec3 project_uCommonUnitsPerWorldUnit2;
+uniform vec3 project_uCommonOrigin;
 
 uniform vec2 project_uViewportSize;
 uniform float project_uDevicePixelRatio;
