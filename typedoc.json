@@ -1,6 +1,6 @@
 {
   "entryPoints": ["./src/index.ts"],
-  "gitRevision": "master",
+  "gitRevision": "main",
   "sourceLinkTemplate": "https://github.com/sakitam-gis/mercator-proj/blob/{gitRevision}/{path}#L{line}",
   "excludeExternals": true,
   "excludePrivate": true,
@@ -8,13 +8,10 @@
   "excludeProtected": true,
   "hideGenerator": true,
   "includeVersion": true,
-  "hideBreadcrumbs": true,
-  "allReflectionsHaveOwnDocument": true,
   "sort": ["source-order"],
-  "plugin": ["typedoc-plugin-markdown", "typedoc-plugin-not-exported"],
+  "plugin": ["typedoc-plugin-not-exported"],
   "name": "mercator-proj",
   "out": "./docs",
   "readme": "none",
-  "entryDocument": "index.md",
   "tsconfig": "./tsconfig.docs.json"
 }

@@ -22,6 +22,7 @@
     "prettier": "prettier --parser=typescript --write **/*.{js,ts,md}",
     "test": "pnpm run build && pnpm run test-only",
     "test-only": "vitest run",
+    "prepublishOnly": "pnpm run build && pnpm run build:minify",
     "coverage": "vitest run --coverage",
     "semantic-release": "semantic-release"
   },
