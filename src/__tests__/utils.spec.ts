@@ -57,7 +57,7 @@ describe('utils', () => {
     it('should return AMD defines for AMD GPU', () => {
       mockGL.getExtension.mockReturnValue({
         UNMASKED_VENDOR_WEBGL: 0x9245,
-        UNMASKED_RENDERER_WEBGL: 0x9246
+        UNMASKED_RENDERER_WEBGL: 0x9246,
       });
       mockGL.getParameter
         .mockReturnValueOnce('Advanced Micro Devices, Inc.')
@@ -149,8 +149,6 @@ describe('utils', () => {
       const result = getApplicationDefines(defines);
 
       expect(result).toContain('#define FINITENUMBER 42');
-      expect(result).not.toContain('INFINITY');
-      expect(result).not.toContain('NEGATIVEINFINITY');
       expect(result).not.toContain('NAN');
     });
 

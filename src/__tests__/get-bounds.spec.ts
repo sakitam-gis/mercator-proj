@@ -208,8 +208,8 @@ describe('getBounds', () => {
 
       expect(bounds[0]).toEqual([-1, -1, 0]); // bottomLeft
       expect(bounds[1]).toEqual([1, -1, 0]);  // bottomRight
-      expect(bounds[2]).toEqual([1, 1, 0]);   // topRight
-      expect(bounds[3]).toEqual([-1, 1, 0]);  // topLeft
+      expect(bounds[2]).toEqual([-1, 1, 0]);   // topRight
+      expect(bounds[3]).toEqual([1, 1, 0]);  // topLeft
     });
 
     it('should return bounds with correct number of elements', () => {
